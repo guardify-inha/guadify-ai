@@ -1,5 +1,5 @@
 # scripts/query_pipeline.py
-import os, json, pickle, re, sys
+import os, json, pickle, sys
 import faiss, numpy as np
 from sentence_transformers import SentenceTransformer
 import openai
@@ -8,23 +8,48 @@ import openai
 INDEX_FILE = "../outputs/faiss.index"
 META_FILE = "../outputs/faiss_meta.pkl"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-CANDIDATE_MAX = 20  # LLM 후보 최대 개수
+CANDIDATE_MAX = 20
 
-# load FAISS index & meta
+LAW_DIR = "../law"
+TEMP_DIR = "../temp"
+REFERENCE_FILE = "../data/outputs/chunks.jsonl"  # <- 변경
+
+# ----------------- FAISS & 모델 로드 -----------------
 index = faiss.read_index(INDEX_FILE)
 with open(META_FILE, "rb") as f:
     meta = pickle.load(f)
-
 model = SentenceTransformer(EMBED_MODEL)
 
-# ----------------- OpenAI API -----------------
+# ----------------- OpenAI -----------------
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_KEY:
     print("Error: OPENAI_API_KEY not set")
     sys.exit(1)
 openai.api_key = OPENAI_KEY
 
-# ----------------- 리트리버 -----------------
+# ----------------- reference 예시 로드 (chunks.jsonl) -----------------
+def load_reference_examples():
+    examples = []
+    if not os.path.exists(REFERENCE_FILE):
+        print(f"Warning: {REFERENCE_FILE} not found")
+        return examples
+    with open(REFERENCE_FILE, "r", encoding="utf-8") as f:
+        for idx, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if obj.get("source_tag") == "contract":
+                examples.append({
+                    "source_file": obj.get("source_file", "unknown"),
+                    "chunk_idx": idx,
+                    "text": obj.get("text", "")
+                })
+    return examples
+
+REFERENCE_EXAMPLES = load_reference_examples()
+
+# ----------------- 유사도 검색 -----------------
 def retrieve_similar(text, top_k=5):
     emb = model.encode([text]).astype("float32")
     D, I = index.search(emb, top_k)
@@ -33,7 +58,7 @@ def retrieve_similar(text, top_k=5):
         results.append(meta[idx])
     return results
 
-# ----------------- LLM 후보 추출 -----------------
+# ----------------- 후보 조항 추출 -----------------
 def extract_candidates_llm(full_text, max_candidates=CANDIDATE_MAX):
     prompt = f"""
 You are a Korean legal assistant.
@@ -51,11 +76,13 @@ Contract text:
         max_tokens=1000
     )
     text = resp.choices[0].message.content.strip()
-
-    # JSON 블록 제거 가능 (```json ... ```)
+    # 코드 블록 제거
     if text.startswith("```"):
-        text = "\n".join(text.split("\n")[1:-1]).strip()
-    
+        text = "\n".join(text.split("\n")[1:])
+        if text.endswith("```"):
+            text = "\n".join(text.split("\n")[:-1])
+    text = text.strip()
+
     try:
         data = json.loads(text)
         return [item["clause"] for item in data if "clause" in item]
@@ -64,21 +91,34 @@ Contract text:
         print("LLM raw response:", text)
         return []
 
-# ----------------- LLM 최종 판단 -----------------
-def ask_llm_for_risk_clause(clause_text, retrieved_examples):
+# ----------------- 최종 위험 판단 -----------------
+def ask_llm_for_risk_clause(clause_text, retrieved_examples, reference_examples):
     prompt = f"""
-You are a legal assistant. Evaluate the risk that the following contract clause is an unfair term for consumers.
+You are a legal assistant. Evaluate the risk that the following contract clause is an unfair term.
 
 Clause:
-\"\"\"{clause_text}\"\"\"
+\"\"\"{clause_text}\"\"\" 
 
-Relevant prior examples (short):
+Consider the following:
+1. Prior law/guidelines in order of priority: 
+   - 약관심사지침.pdf
+   - Other laws in {LAW_DIR}
+   - 시행령 in {TEMP_DIR} (today focus on 금융)
+2. Previously judged unfair examples from reference folder:
 """
-    for ex in retrieved_examples:
-        prompt += f"- From {ex['source_file']} (chunk {ex['chunk_idx']}): {ex['text'][:200].replace('\\n',' ')}...\n"
+    for ex in reference_examples:
+        if ex['text'] in clause_text:
+            prompt += f"- Match with {ex['source_file']} line {ex['chunk_idx']}: {ex['text'][:150]}...\n"
 
     prompt += """
-Answer in valid JSON: {"risk_percent": int(0-100), "risk_level": "low/medium/high", "reason": "...", "suggested_law_codes": ["..."]}
+Answer in valid JSON with:
+{
+  "risk_percent": int(0-100),
+  "risk_level": "low/medium/high",
+  "reason": "...",
+  "suggested_law_codes": ["..."]
+}
+Use only the provided data. Do not hallucinate.
 """
     resp = openai.chat.completions.create(
         model="gpt-4o-mini",
@@ -87,30 +127,66 @@ Answer in valid JSON: {"risk_percent": int(0-100), "risk_level": "low/medium/hig
         max_tokens=400
     )
     text = resp.choices[0].message.content.strip()
+    # 코드 블록 제거
+    if text.startswith("```"):
+        text = "\n".join(text.split("\n")[1:])
+        if text.endswith("```"):
+            text = "\n".join(text.split("\n")[:-1])
+    text = text.strip()
 
-    # JSON 확인용 (실패해도 그대로 리턴)
     try:
-        json.loads(text)
+        return json.loads(text)
     except Exception:
         print("Warning: LLM returned non-JSON. Raw:", text)
-    return text
+        return {"risk_percent":0, "risk_level":"low", "reason":"failed parsing","suggested_law_codes":[]}
 
 # ----------------- 메인 -----------------
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python query_pipeline.py path/to/contract.txt")
+        print("Usage: python query_pipeline.py path/to/query_results.json")
         sys.exit(1)
 
-    txt = open(sys.argv[1], encoding="utf-8").read()
-    candidates = extract_candidates_llm(txt)
+    results = json.load(open(sys.argv[1], encoding="utf-8"))
+    final_candidates = results.get("final_candidates", [])
 
-    if not candidates:
+    if not final_candidates:
         print("No candidate clauses found.")
         sys.exit(0)
 
-    for c in candidates:
-        retrieved = retrieve_similar(c, top_k=5)
-        llm_response = ask_llm_for_risk_clause(c, retrieved)
-        print("CANDIDATE:", c[:200])
-        print("LLM RESPONSE:", llm_response)
-        print("-"*80)
+    all_results = []
+    summary_lines = []
+
+    for c in final_candidates:
+        clause_text = c.get("excerpt") or c.get("text") or c
+        clause_identifier = c.get("law_article") or c.get("article") or "Unknown Article"
+        retrieved = retrieve_similar(clause_text, top_k=5)
+        llm_response = ask_llm_for_risk_clause(clause_text, retrieved, REFERENCE_EXAMPLES)
+        
+        # 1) JSON 형태로 저장
+        record = {
+            "article": clause_identifier,
+            "clause_text": clause_text,
+            "risk_eval": llm_response
+        }
+        all_results.append(record)
+
+        # 2) 사람이 읽기 좋은 텍스트 요약
+        summary_lines.append(
+            f"조항: {clause_identifier}\n"
+            f"문장 원문:\n{clause_text}\n"
+            f"리스크: {llm_response.get('risk_percent', 0)}% / {llm_response.get('risk_level','low')}\n"
+            f"참고 법/판례: {', '.join(llm_response.get('suggested_law_codes', []))}\n"
+            f"설명: {llm_response.get('reason','')}\n"
+            f"{'-'*80}\n"
+        )
+
+    # 전체 JSON 저장
+    os.makedirs("../outputs", exist_ok=True)
+    with open("../outputs/all_results.json", "w", encoding="utf-8") as f:
+        json.dump(all_results, f, ensure_ascii=False, indent=2)
+
+    # 사람이 읽기 좋은 요약 저장
+    with open("../outputs/summary.txt", "w", encoding="utf-8") as f:
+        f.writelines(summary_lines)
+
+    print("Evaluation done. JSON saved to all_results.json, summary saved to summary.txt")
