@@ -1,5 +1,5 @@
 """
-Query pipeline:
+Query pipeline with GNN risk score:
 - Load LLM + GNN results
 - Retrieve similar clauses
 - Combine risk scores
@@ -14,6 +14,7 @@ import json
 # - retrieve_similar(clause_text, top_k=5)
 # - ask_llm_for_risk_clause(clause_text, retrieved, REFERENCE_EXAMPLES)
 # - REFERENCE_EXAMPLES, model, index, meta, gnn_preds, ALPHA, BETA
+#   (gnn_preds는 {chunk_id: 확률} dict, ALPHA/BETA는 가중치)
 
 if len(sys.argv) < 2:
     print("Usage: python query_pipeline.py path/to/query_results.json")
@@ -35,10 +36,13 @@ for c in final_candidates:
     clause_text = c.get("excerpt") or c.get("text") or str(c)
     clause_identifier = c.get("law_article") or c.get("article") or "Unknown Article"
 
+    # (1) 유사 조항 검색
     retrieved = retrieve_similar(clause_text, top_k=5)
+
+    # (2) LLM 리스크 판별
     llm_response = ask_llm_for_risk_clause(clause_text, retrieved, REFERENCE_EXAMPLES)
 
-    # 3. FAISS 기반 최근접 chunk 찾기
+    # (3) GNN 위험도 찾기 (FAISS recent chunk 기준)
     q_emb = model.encode([clause_text]).astype("float32")
     Dq, Iq = index.search(q_emb, 1)
     gnn_prob = None
@@ -48,7 +52,7 @@ for c in final_candidates:
         if cid and cid in gnn_preds:
             gnn_prob = float(gnn_preds[cid])
 
-    # 4. 점수 결합
+    # (4) 점수 결합
     llm_score = llm_response.get("risk_percent", 0) / 100.0
     if gnn_prob is None:
         final_score = llm_score
@@ -58,9 +62,9 @@ for c in final_candidates:
     record = {
         "article": clause_identifier,
         "clause_text": clause_text,
-        "llm_eval": llm_response,
-        "gnn_prob": gnn_prob,
-        "final_score": round(float(final_score), 4),
+        "llm_eval": llm_response,    # LLM 결과(reason, risk_percent 등)
+        "gnn_prob": gnn_prob,        # GNN 예측 위험도 (0~1)
+        "final_score": round(float(final_score), 4),  # 결합 점수
     }
     all_results.append(record)
 
