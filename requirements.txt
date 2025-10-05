@@ -1,0 +1,21 @@
+# Core dependencies
+sentence-transformers==2.2.2
+faiss-cpu==1.7.4
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+
+# PDF processing
+PyMuPDF==1.23.8
+pdfplumber==0.9.0
+
+# LLM and AI
+openai==1.3.0
+anthropic==0.7.0
+
+# Database
+neo4j==5.14.0
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1
