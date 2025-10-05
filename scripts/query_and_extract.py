@@ -113,7 +113,7 @@ def call_openai_filter(chunks, api_key=None):
         return {"error": "no_json_found", "raw": text}
 
 # ----------------- 메인 로직 -----------------
-def analyze_contract(text, openai_call=True, save_path="../outputs/query_results.json"):
+def analyze_contract(text, openai_call=True, output_dir="../outputs"):
     # 1. 계약서에서 조항 단위 분리
     clauses = split_by_article(text)
 
@@ -133,6 +133,11 @@ def analyze_contract(text, openai_call=True, save_path="../outputs/query_results
         if isinstance(llm_result, list):
             llm_filtered_count = len(filtered) - len(llm_result)
 
+    # 타임스탬프 폴더 생성 (초단위까지)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    result_dir = os.path.join(output_dir, f"analysis_{timestamp}")
+    os.makedirs(result_dir, exist_ok=True)
+    
     result = {
         "timestamp": datetime.now().isoformat(),
         "total_articles": len(clauses),
@@ -142,10 +147,11 @@ def analyze_contract(text, openai_call=True, save_path="../outputs/query_results
     }
 
     # 저장
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+    save_path = os.path.join(result_dir, "query_results.json")
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    
+    print(f"📁 결과 저장 위치: {result_dir}")
 
     # 보기 좋게 출력
     print("==== 분석 결과 ====")
