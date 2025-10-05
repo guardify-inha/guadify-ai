@@ -146,7 +146,8 @@ if __name__ == "__main__":
         print("Usage: python query_pipeline.py path/to/query_results.json")
         sys.exit(1)
 
-    results = json.load(open(sys.argv[1], encoding="utf-8"))
+    query_results_path = sys.argv[1]
+    results = json.load(open(query_results_path, encoding="utf-8"))
     final_candidates = results.get("final_candidates", [])
 
     if not final_candidates:
@@ -180,13 +181,16 @@ if __name__ == "__main__":
             f"{'-'*80}\n"
         )
 
+    # query_results.json과 같은 폴더에 저장
+    result_dir = os.path.dirname(query_results_path)
+    
     # 전체 JSON 저장
-    os.makedirs("../outputs", exist_ok=True)
-    with open("../outputs/all_results.json", "w", encoding="utf-8") as f:
+    with open(os.path.join(result_dir, "all_results.json"), "w", encoding="utf-8") as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2)
 
     # 사람이 읽기 좋은 요약 저장
-    with open("../outputs/summary.txt", "w", encoding="utf-8") as f:
+    with open(os.path.join(result_dir, "summary.txt"), "w", encoding="utf-8") as f:
         f.writelines(summary_lines)
 
+    print(f"📁 결과 저장 위치: {result_dir}")
     print("Evaluation done. JSON saved to all_results.json, summary saved to summary.txt")
