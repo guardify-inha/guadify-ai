@@ -4,8 +4,25 @@
 
 echo "🤖 AI 기반 불공정 약관 탐지 시스템 실행"
 
-# 가상환경 활성화
-source venv/bin/activate
+# --- 수정된 부분 시작 ---
+
+# 가상환경 활성화 (운영체제 호환)
+if [ -f "venv/Scripts/activate" ]; then
+    # Windows (Git Bash)
+    echo "🐍 Windows/Git Bash 환경을 감지했습니다. 가상 환경을 활성화합니다..."
+    source venv/Scripts/activate
+elif [ -f "venv/bin/activate" ]; then
+    # macOS/Linux
+    echo "🐍 macOS/Linux 환경을 감지했습니다. 가상 환경을 활성화합니다..."
+    source venv/bin/activate
+else
+    echo "❌ 가상 환경 활성화 스크립트를 찾을 수 없습니다."
+    echo "💡 venv/Scripts/activate 또는 venv/bin/activate 경로를 확인해주세요."
+    exit 1
+fi
+
+# --- 수정된 부분 끝 ---
+
 
 # 환경 변수 로드
 if [ -f ".env" ]; then
