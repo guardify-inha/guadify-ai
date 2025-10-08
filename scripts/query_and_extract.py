@@ -1,4 +1,3 @@
-# scripts/query_and_extract.py
 import os
 import re
 import json
@@ -17,13 +16,10 @@ OPENAI_TEMPERATURE = 0.0
 
 INDEX_FILE = os.path.join("..", "outputs", "faiss.index")
 META_FILE = os.path.join("..", "outputs", "faiss_meta.pkl")
-EMBED_MODEL = "all-MiniLM-L6-v2"
+EMBED_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"  # 공개 한국어 법률 SBERT
 
-# 표준약관과 '충분히 유사하다'고 판단하는 코사인 유사도 임계값 (0~1 범위)
-# (IndexFlatIP + normalized embeddings 사용시 D는 cosine similarity)
-SIMILARITY_THRESHOLD = 0.70
+SIMILARITY_THRESHOLD = 0.70  # cosine similarity 기준
 
-# 법조문 분리 정규식 (재사용)
 ARTICLE_RE = re.compile(r'(제\s*\d+\s*조[^\n\r]*)')
 
 # ----------------- 조항 단위 분리 -----------------
@@ -41,7 +37,7 @@ def split_by_article(text):
         results.append({"article": article_title, "text": body})
     return results
 
-# ----------------- FAISS 로드 및 표준약관 유사도 검색 -----------------
+# ----------------- FAISS 로드 및 유사도 검색 -----------------
 embed_model = SentenceTransformer(EMBED_MODEL)
 
 def load_faiss():
@@ -53,13 +49,9 @@ def load_faiss():
     return index, meta
 
 def search_standard_similarity(query_text, top_k=5):
-    """
-    표준약관 (source_tag == 'standard') 중 가장 유사한 항목(들)을 반환.
-    반환값: [{"text": ..., "score": 0.89}, ...] (score는 cosine 유사도: 높을수록 유사)
-    """
     index, meta = load_faiss()
     q_emb = embed_model.encode([query_text]).astype("float32")
-    # 이미 인덱스가 normalized + IndexFlatIP 이면 D는 inner product~cosine
+    faiss.normalize_L2(q_emb)
     D, I = index.search(q_emb, top_k)
     results = []
     for dist, idx in zip(D[0], I[0]):
@@ -71,9 +63,8 @@ def search_standard_similarity(query_text, top_k=5):
         results.append({"text": rec["text"], "score": float(dist)})
     return results
 
-# ----------------- LLM 후보 추출 (기존 방식 유지) -----------------
+# ----------------- LLM 후보 추출 -----------------
 def call_openai_filter(chunks, api_key=None):
-    """청크 리스트를 받아 LLM에게 잠재적 위험 후보를 최대한 반환"""
     if api_key is None:
         api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -111,8 +102,6 @@ def call_openai_filter(chunks, api_key=None):
         max_tokens=OPENAI_MAX_TOKENS
     )
     text = resp.choices[0].message.content.strip()
-
-    # Try to parse JSON; fallbacks if model wraps in markdown/code
     try:
         return json.loads(text)
     except Exception:
@@ -124,22 +113,16 @@ def call_openai_filter(chunks, api_key=None):
                 return {"error": "failed_to_parse_json", "raw": text}
         return {"error": "no_json_found", "raw": text}
 
-# ----------------- 메인 로직 (표준약관 필터 포함) -----------------
+# ----------------- 메인 분석 -----------------
 def analyze_contract(text, openai_call=True, save_path=os.path.join("..", "outputs", "query_results.json")):
-    # 1. 계약서에서 조항 단위 분리
     clauses = split_by_article(text)
-
-    # 2. 표준약관(standard)과 충분히 유사하면 **제외** (공정한 문장으로 판단)
     filtered = []
     for c in clauses:
         sims = search_standard_similarity(c["text"], top_k=3)
-        # `sims`에서 가장 높은 유사도값이 임계값 이상이면 '표준약관과 유사'하다고 보고 제외
         if sims and max([s["score"] for s in sims]) >= SIMILARITY_THRESHOLD:
-            # excluded as 'standard-like'
             continue
         filtered.append(c)
 
-    # 3. LLM으로 잠재적 위험 후보 최대한 추출
     llm_result = None
     llm_filtered_count = 0
     if openai_call and filtered:
@@ -155,13 +138,11 @@ def analyze_contract(text, openai_call=True, save_path=os.path.join("..", "outpu
         "final_candidates": llm_result
     }
 
-    # 저장
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
-    # 보기 좋게 출력
     print("==== 분석 결과 ====")
     print(f"총 조항 수: {len(clauses)}")
     print(f"표준약관 필터 이후 남은 조항: {len(filtered)}")
