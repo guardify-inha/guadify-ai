@@ -24,9 +24,59 @@ PDF 문서 → 다중 임베딩 → Vector RAG + Graph RAG → Langchain 통합 
 - **embed_and_index.py**: 텍스트 → 벡터 임베딩
 - **query_and_extract.py**: 불공정 조항 후보 추출
 - **query_pipeline.py**: 최종 위험도 평가
-- **db/**: Neo4j 그래프 데이터베이스 연결 (개발 중)
+- **db/**: Neo4j 그래프 데이터베이스 (Graph RAG)
+  - **neo4j_client.py**: Neo4j 연결 및 CRUD 작업
+  - **entity_extractor.py**: 법률 엔티티 추출
+  - **graph_builder.py**: 법률 지식 그래프 구축
+  - **graph_retriever.py**: Graph RAG 검색
 
 ## 🚀 빠른 시작
+
+### 🆕 새로운 환경에서 처음 실행하기
+
+```bash
+# 1. 프로젝트 클론
+git clone <repository-url>
+cd guadify-ai
+
+# 2. 가상환경 설정
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. 의존성 설치
+pip install -r requirements.txt
+
+# 4. 환경 변수 설정
+cp env.example .env
+# .env 파일에서 OPENAI_API_KEY 설정
+
+# 5. Docker 설치 및 Neo4j 실행
+# macOS
+brew install --cask docker
+open -a Docker
+
+# Windows (PowerShell)
+# Docker Desktop 다운로드: https://www.docker.com/products/docker-desktop/
+# 설치 후 Docker Desktop 실행
+
+# Linux (Ubuntu/Debian)
+# sudo apt update && sudo apt install docker.io
+# sudo systemctl start docker
+
+# Neo4j 컨테이너 실행 (모든 OS 공통)
+docker run -d --name neo4j-guardify -p 7687:7687 -p 7474:7474 -e NEO4J_AUTH=neo4j/password -e NEO4J_PLUGINS='["apoc"]' neo4j:latest
+
+# 6. AI 탐지 시스템 실행
+# macOS/Linux
+./run_ai_detection.sh
+
+# Windows (PowerShell)
+# .\run_ai_detection.sh
+# 또는
+# bash run_ai_detection.sh
+```
+
+## 🚀 상세 설정 가이드
 
 ### 1. 환경 설정
 
@@ -42,12 +92,90 @@ pip install -r requirements.txt
 ### 2. 환경 변수 설정
 
 ```bash
-# OpenAI API 키 설정
-export OPENAI_API_KEY=your_openai_api_key_here
+# 환경 변수 파일 복사
+cp env.example .env
 
+# .env 파일 편집하여 API 키 설정
+# NEO4J_URI=bolt://localhost:7687
+# NEO4J_USERNAME=neo4j
+# NEO4J_PASSWORD=password
+# OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-### 3. 시스템 실행
+### 3. Docker 및 Neo4j 데이터베이스 설정
+
+#### Docker 설치 (필요한 경우)
+
+```bash
+# macOS (Homebrew 사용)
+brew install --cask docker
+open -a Docker
+
+# Windows
+# 1. Docker Desktop 다운로드: https://www.docker.com/products/docker-desktop/
+# 2. 설치 후 Docker Desktop 실행
+# 3. PowerShell에서 확인
+docker --version
+
+# Linux (Ubuntu/Debian)
+sudo apt update && sudo apt install docker.io
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Docker 실행 확인 (모든 OS 공통)
+docker --version
+```
+
+#### Neo4j 컨테이너 실행
+
+```bash
+# Neo4j Docker 컨테이너 실행 (백그라운드)
+docker run -d \
+  --name neo4j-guardify \
+  -p 7687:7687 \
+  -p 7474:7474 \
+  -e NEO4J_AUTH=neo4j/password \
+  -e NEO4J_PLUGINS='["apoc"]' \
+  neo4j:latest
+
+# 컨테이너 상태 확인
+docker ps
+
+# Neo4j 웹 인터페이스 접속
+# http://localhost:7474 (neo4j/password)
+```
+
+#### Neo4j 컨테이너 관리
+
+```bash
+# 컨테이너 중지
+docker stop neo4j-guardify
+
+# 컨테이너 재시작
+docker start neo4j-guardify
+
+# 컨테이너 삭제 (데이터 손실 주의)
+docker rm neo4j-guardify
+```
+
+### 4. 시스템 실행
+
+#### AI 기반 불공정 조항 탐지 (추천)
+
+```bash
+# AI 탐지 시스템 실행 (가장 최신 기능)
+./run_ai_detection.sh
+
+# 다른 계약서로 테스트
+./run_ai_detection.sh your_contract.txt
+
+# 결과 확인
+# results/analysis_YYYYMMDD_HHMMSS/ 폴더에서
+# - ai_detection_result.json (원본 JSON)
+# - analysis_report.md (마크다운 보고서)
+```
+
+#### 전체 파이프라인 실행 (기존 Vector RAG)
 
 ```bash
 # 전체 파이프라인 실행
@@ -56,8 +184,19 @@ export OPENAI_API_KEY=your_openai_api_key_here
 # 또는 단계별 실행
 python scripts/extract_and_chunk.py      # 1단계: 문서 전처리
 python scripts/embed_and_index.py        # 2단계: 벡터 임베딩
-python scripts/query_and_extract.py --file data/contracts/user/test.txt --openai  # 3단계: 조항 추출
-python scripts/query_pipeline.py outputs/query_results.json  # 4단계: 위험도 평가
+python scripts/build_graph_rag.py --action build  # 3단계: Graph RAG 구축
+python scripts/query_and_extract.py --file test_inputs/sample_contract.txt --openai  # 4단계: 조항 추출
+python scripts/query_pipeline.py outputs/query_results.json  # 5단계: 위험도 평가
+```
+
+### 5. Graph RAG 테스트
+
+```bash
+# Graph RAG 시스템 테스트
+python test_graph_rag.py
+
+# Graph RAG 검색 테스트
+python scripts/build_graph_rag.py --action search --query "제1조"
 ```
 
 ## 📊 데이터 구성
