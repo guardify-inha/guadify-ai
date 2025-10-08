@@ -267,7 +267,7 @@ def main():
     if args.output:
         # 타임스탬프 폴더 생성
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"../results/analysis_{timestamp}"
+        output_dir = f"results/analysis_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"결과 폴더 생성: {output_dir}")
         
