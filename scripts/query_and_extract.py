@@ -1,3 +1,12 @@
+"""
+query_and_extract.py (Updated)
+- Acts as a pre-processor to extract candidate clauses for GNN analysis.
+- Step 1: Splits user's contract into articles/clauses.
+- Step 2: Filters out clauses that are highly similar to known 'standard' clauses using FAISS.
+- Step 3 (Optional): Uses an LLM not to find unfair clauses, but to *prune* obviously safe/standard clauses from the remaining candidates.
+- Output: A simple list of candidate clauses (`candidate_clauses.jsonl`) to be fed into the GNN inference script.
+"""
+
 import os
 import re
 import json
@@ -14,20 +23,26 @@ OPENAI_MODEL = "gpt-4o"
 OPENAI_MAX_TOKENS = 1500
 OPENAI_TEMPERATURE = 0.0
 
-INDEX_FILE = os.path.join("..", "outputs", "faiss.index")
-META_FILE = os.path.join("..", "outputs", "faiss_meta.pkl")
-EMBED_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"  # 공개 한국어 법률 SBERT
+# 경로 설정
+OUT_DIR = os.path.join("..", "outputs")
+INDEX_FILE = os.path.join(OUT_DIR, "faiss.index")
+META_FILE = os.path.join(OUT_DIR, "faiss_meta.pkl")
+CANDIDATES_FILE = os.path.join(OUT_DIR, "candidate_clauses.jsonl") # 최종 후보 저장 파일
 
-SIMILARITY_THRESHOLD = 0.70  # cosine similarity 기준
+# 임베딩 모델
+EMBED_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
+SIMILARITY_THRESHOLD = 0.75 # 표준 약관과의 유사도 기준 (조금 더 엄격하게 설정 가능)
 
+# 정규 표현식
 ARTICLE_RE = re.compile(r'(제\s*\d+\s*조[^\n\r]*)')
 
-# ----------------- 조항 단위 분리 -----------------
+# ----------------- 헬퍼 함수 (기존과 거의 동일) -----------------
+
 def split_by_article(text):
+    """조항 단위로 텍스트를 분리합니다."""
     matches = list(ARTICLE_RE.finditer(text))
     if not matches:
-        return [{"article": None, "text": text.strip()}]
-
+        return [{"article": "전체", "text": text.strip()}]
     results = []
     for i, m in enumerate(matches):
         start_idx = m.start()
@@ -37,133 +52,129 @@ def split_by_article(text):
         results.append({"article": article_title, "text": body})
     return results
 
-# ----------------- FAISS 로드 및 유사도 검색 -----------------
+# FAISS 관련 객체는 한 번만 로드하도록 전역으로 관리
+print("Loading embedding model and FAISS index...")
 embed_model = SentenceTransformer(EMBED_MODEL)
-
-def load_faiss():
-    if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
-        raise FileNotFoundError("FAISS index or meta not found. Run embed_and_index.py first.")
-    index = faiss.read_index(INDEX_FILE)
+if os.path.exists(INDEX_FILE) and os.path.exists(META_FILE):
+    faiss_index = faiss.read_index(INDEX_FILE)
     with open(META_FILE, "rb") as f:
-        meta = pickle.load(f)
-    return index, meta
+        faiss_meta = pickle.load(f)
+else:
+    raise FileNotFoundError("FAISS index/meta not found. Run embed_and_index.py first.")
 
-def search_standard_similarity(query_text, top_k=5):
-    index, meta = load_faiss()
-    q_emb = embed_model.encode([query_text]).astype("float32")
+def search_standard_similarity(query_text, top_k=1):
+    """FAISS를 사용해 표준 약관과의 최고 유사도를 검색합니다."""
+    q_emb = embed_model.encode([query_text], convert_to_tensor=False).astype("float32")
     faiss.normalize_L2(q_emb)
-    D, I = index.search(q_emb, top_k)
-    results = []
-    for dist, idx in zip(D[0], I[0]):
-        if idx < 0:
-            continue
-        rec = meta[idx]
-        if rec.get("source_tag") != "standard":
-            continue
-        results.append({"text": rec["text"], "score": float(dist)})
-    return results
+    distances, indices = faiss_index.search(q_emb, top_k)
+    
+    max_sim = 0.0
+    for dist, idx in zip(distances[0], indices[0]):
+        if idx < 0: continue
+        rec = faiss_meta[idx]
+        # 'standard' 태그를 가진 노드와의 유사도만 확인
+        if rec.get("source_tag") == "standard":
+            max_sim = max(max_sim, float(dist))
+    return max_sim
 
-# ----------------- LLM 후보 추출 -----------------
-def call_openai_filter(chunks, api_key=None):
+# ----------------- 🎯 LLM 필터 (역할 변경) -----------------
+
+def call_llm_to_prune_clauses(chunks, api_key=None):
+    """
+    LLM을 호출하여 명백히 안전하거나 표준적인 조항을 식별합니다.
+    불공정성을 찾는게 아니라, '더 이상 분석할 필요가 없는' 조항의 인덱스를 반환합니다.
+    """
     if api_key is None:
         api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY가 환경변수에 설정되어 있지 않습니다.")
     openai.api_key = api_key
 
-    assembled = []
-    total_len = 0
-    MAX_PROMPT_CHARS = 15000
-    for i, c in enumerate(chunks):
-        piece = f"[chunk{i}] ({c.get('article')}) {c.get('text')}"
-        if total_len + len(piece) > MAX_PROMPT_CHARS:
-            break
-        assembled.append(piece)
-        total_len += len(piece)
-
+    assembled = [f"[chunk{i}] {c.get('text')}" for i, c in enumerate(chunks)]
+    
     system_msg = (
-        "You are a Korean legal assistant. "
-        "Input은 계약 조항 후보입니다.\n"
-        "모든 조항 중 잠재적 위험이 있는 조항은 최대한 포함하세요. "
-        "공정한 조항이라도 위험 가능성이 조금이라도 있으면 후보로 남겨야 합니다.\n"
-        "Return ONLY valid JSON array. Each element must have:\n"
-        " - article: related article title\n"
-        " - excerpt: short excerpt (<=300 chars)\n"
-        " - reason: why it may be unfair\n"
+        "You are a meticulous Korean legal assistant. Your task is to identify contract clauses "
+        "that are **absolutely standard, common, and have no potential for unfairness or ambiguity**."
+        "You are a filter to remove obviously safe clauses before a more detailed analysis."
+        "Return ONLY a valid JSON object with a single key 'safe_chunk_indices', "
+        "containing a list of integer indices for the chunks that are safe to ignore."
+        "\nExample: {\"safe_chunk_indices\": [2, 5, 8]}"
+        "\nIf no clauses are clearly safe, return an empty list: {\"safe_chunk_indices\": []}"
     )
 
-    user_msg = "Analyze the following clauses. Include all clauses with any potential risk, even if minor:\n\n" + "\n\n---\n\n".join(assembled)
-
-    resp = openai.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[{"role": "system", "content": system_msg},
-                  {"role": "user", "content": user_msg}],
-        temperature=OPENAI_TEMPERATURE,
-        max_tokens=OPENAI_MAX_TOKENS
-    )
-    text = resp.choices[0].message.content.strip()
+    user_msg = "Please identify the safe clauses from the following list:\n\n" + "\n".join(assembled)
+    
     try:
-        return json.loads(text)
-    except Exception:
-        m = re.search(r"(\[.*\])", text, flags=re.S)
-        if m:
-            try:
-                return json.loads(m.group(1))
-            except Exception:
-                return {"error": "failed_to_parse_json", "raw": text}
-        return {"error": "no_json_found", "raw": text}
+        resp = openai.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
+            ],
+            temperature=OPENAI_TEMPERATURE,
+            max_tokens=OPENAI_MAX_TOKENS,
+            response_format={"type": "json_object"} # JSON 출력 모드 활용
+        )
+        content = resp.choices[0].message.content
+        data = json.loads(content)
+        safe_indices = data.get("safe_chunk_indices", [])
+        if isinstance(safe_indices, list):
+            return safe_indices
+        return []
+    except Exception as e:
+        print(f"Error calling LLM or parsing response: {e}")
+        return [] # 오류 발생 시, 안전한 조항이 없는 것으로 간주
 
-# ----------------- 메인 분석 -----------------
-def analyze_contract(text, openai_call=True, save_path=os.path.join("..", "outputs", "query_results.json")):
+# ----------------- 🚀 메인 분석 파이프라인 -----------------
+
+def extract_candidate_clauses(text, use_llm_filter=True, save_path=CANDIDATES_FILE):
+    """GNN 분석을 위한 최종 후보 조항 목록을 추출합니다."""
+    print("🚀 Starting clause extraction pipeline...")
+    
+    # 1. 텍스트를 조항 단위로 분리
     clauses = split_by_article(text)
-    filtered = []
+    print(f"   - Step 1: Split into {len(clauses)} clauses.")
+
+    # 2. 표준 약관과 유사한 조항 필터링 (FAISS)
+    candidates_after_faiss = []
     for c in clauses:
-        sims = search_standard_similarity(c["text"], top_k=3)
-        if sims and max([s["score"] for s in sims]) >= SIMILARITY_THRESHOLD:
+        max_sim = search_standard_similarity(c["text"])
+        if max_sim >= SIMILARITY_THRESHOLD:
             continue
-        filtered.append(c)
+        candidates_after_faiss.append(c)
+    print(f"   - Step 2: {len(candidates_after_faiss)} clauses remaining after FAISS similarity filter.")
 
-    llm_result = None
-    llm_filtered_count = 0
-    if openai_call and filtered:
-        llm_result = call_openai_filter(filtered)
-        if isinstance(llm_result, list):
-            llm_filtered_count = len(filtered) - len(llm_result)
-
-    result = {
-        "timestamp": datetime.now().isoformat(),
-        "total_articles": len(clauses),
-        "after_standard_filter": len(filtered),
-        "llm_filtered_count": llm_filtered_count,
-        "final_candidates": llm_result
-    }
-
+    # 3. 명백히 안전한 조항 필터링 (LLM)
+    if use_llm_filter and candidates_after_faiss:
+        print("   - Step 3: Using LLM to prune obviously safe clauses...")
+        safe_indices = call_llm_to_prune_clauses(candidates_after_faiss)
+        print(f"     - LLM identified {len(safe_indices)} clauses as safe.")
+        final_candidates = [
+            c for i, c in enumerate(candidates_after_faiss) if i not in safe_indices
+        ]
+    else:
+        final_candidates = candidates_after_faiss
+    
+    print(f"   - Final: {len(final_candidates)} candidate clauses remain for GNN analysis.")
+    
+    # 4. 최종 후보 목록을 파일로 저장
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            for clause in final_candidates:
+                f.write(json.dumps(clause, ensure_ascii=False) + "\n")
+        print(f"✅ Pipeline finished. Candidates saved to {save_path}")
 
-    print("==== 분석 결과 ====")
-    print(f"총 조항 수: {len(clauses)}")
-    print(f"표준약관 필터 이후 남은 조항: {len(filtered)}")
-    print(f"LLM으로 제외된 조항 수: {llm_filtered_count}")
-    print("잠재적 위험 조항:")
-    if isinstance(llm_result, list):
-        for r in llm_result:
-            print(f"- {r.get('article')}: {r.get('excerpt')} ({r.get('reason')})")
-    else:
-        print(llm_result)
+    return final_candidates
 
-    return result
-
-# ----------------- CLI -----------------
+# ----------------- CLI 실행 -----------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--file", help="분석할 계약서(텍스트) 파일 경로", required=True)
-    parser.add_argument("--openai", action="store_true", help="OpenAI 호출 여부")
+    parser = argparse.ArgumentParser(description="Extract candidate clauses from a contract for GNN analysis.")
+    parser.add_argument("--file", help="Path to the contract text file to analyze.", required=True)
+    parser.add_argument("--no-llm", action="store_true", help="Disable the LLM filtering step.")
     args = parser.parse_args()
 
     with open(args.file, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    analyze_contract(text, openai_call=args.openai)
+        contract_text = f.read()
+    
+    extract_candidate_clauses(contract_text, use_llm_filter=not args.no_llm)
