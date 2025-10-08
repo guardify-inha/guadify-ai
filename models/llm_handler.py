@@ -4,19 +4,7 @@ LLM 핸들러 모듈
 AI 모델을 활용한 불공정 약관 분석 및 판단을 위한 핵심 모듈
 """
 
-# Windows 환경에서 인코딩 문제 해결
-import sys
 import os
-if sys.platform.startswith('win'):
-    import locale
-    import codecs
-    # UTF-8 인코딩 강제 설정
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
-    # 환경 변수 설정
-    os.environ['PYTHONIOENCODING'] = 'utf-8'
-    os.environ['LANG'] = 'ko_KR.UTF-8'
-
 import json
 import logging
 from typing import Dict, List, Any, Optional
@@ -90,39 +78,39 @@ class LLMHandler:
         """시스템 프롬프트 구성"""
         return """당신은 한국의 법률 전문가입니다. 계약 조항의 불공정성을 정확히 판단하는 것이 당신의 역할입니다.
 
-## 중요 지침
-- **공정한 조항을 불공정으로 오탐하지 마세요**
-- **문맥을 고려하여 종합적으로 판단하세요**
-- **소비자 보호 조항은 일반적으로 공정합니다**
+중요 지침:
+- 공정한 조항을 불공정으로 오탐하지 마세요
+- 문맥을 고려하여 종합적으로 판단하세요  
+- 소비자 보호 조항은 일반적으로 공정합니다
 
-## 불공정성 판단 기준
+불공정성 판단 기준:
 
-### 1. 일방적 불이익 조항
+1. 일방적 불이익 조항
 - 한 당사자에게만 불리한 조건
 - 예: "회사는 언제든지 해지할 수 있으나, 이용자는 사전 통지 없이 해지할 수 없다"
 
-### 2. 소비자 권리 제한
+2. 소비자 권리 제한
 - 소비자의 기본 권리를 제한하는 조항
 - 예: "이용자는 어떠한 경우에도 이의를 제기할 수 없다"
 
-### 3. 정보 제공 의무 회피
+3. 정보 제공 의무 회피
 - 중요한 정보를 제공하지 않는 조항
 - 예: "회사는 정보를 제공할 의무가 없다"
 
-### 4. 손해배상 제한
+4. 손해배상 제한
 - 과도한 손해배상 제한
 - 예: "회사는 어떠한 손해에 대해서도 배상하지 않는다"
 
-### 5. 계약 해지 제한
+5. 계약 해지 제한
 - 불공정한 해지 조건
 - 예: "이용자는 회사의 허락 없이는 해지할 수 없다"
 
-## 공정한 조항의 예시
+공정한 조항의 예시:
 - "이용자는 서비스 이용 중 발생한 피해에 대해 구제를 신청할 수 있습니다"
 - "회사는 신청을 받은 날로부터 30일 이내에 처리 결과를 통지합니다"
 - "양 당사자는 상호 합의하여 계약을 변경할 수 있습니다"
 
-## 출력 형식
+출력 형식:
 반드시 다음 JSON 형식으로 답변하세요:
 {
   "is_unfair": boolean,
@@ -166,26 +154,14 @@ class LLMHandler:
                 legal_context=context_text
             )
             
-            # 텍스트 인코딩 안전 처리 (특수 문자 제거)
-            def safe_encode(text):
-                # em dash, en dash 등 특수 문자를 일반 문자로 대체
-                text = text.replace('\u2014', '--')  # em dash
-                text = text.replace('\u2013', '-')   # en dash
-                text = text.replace('\u201c', '"')   # left double quotation mark
-                text = text.replace('\u201d', '"')   # right double quotation mark
-                text = text.replace('\u2018', "'")   # left single quotation mark
-                text = text.replace('\u2019', "'")   # right single quotation mark
-                return text.encode('utf-8', errors='ignore').decode('utf-8')
-            
-            system_prompt_safe = safe_encode(self.system_prompt)
-            user_prompt_safe = safe_encode(user_prompt)
+            # 프롬프트 구성
             
             # LLM 호출 (최신 OpenAI API)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_prompt_safe},
-                    {"role": "user", "content": user_prompt_safe}
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,  # 낮은 온도로 일관성 확보
                 max_tokens=1000

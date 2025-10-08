@@ -10,9 +10,6 @@ echo "🤖 AI 기반 불공정 약관 탐지 시스템 실행"
 if [ -f "venv/Scripts/activate" ]; then
     # Windows (Git Bash)
     echo "🐍 Windows/Git Bash 환경을 감지했습니다. 가상 환경을 활성화합니다..."
-    # Windows 환경에서 인코딩 문제 해결
-    export PYTHONIOENCODING=utf-8
-    export LANG=ko_KR.UTF-8
     source venv/Scripts/activate
 elif [ -f "venv/bin/activate" ]; then
     # macOS/Linux
@@ -63,8 +60,14 @@ fi
 
 echo "🚀 AI 기반 불공정 약관 탐지 시작..."
 
-# AI 탐지 실행
-python scripts/ai_unfair_detector.py --file "$INPUT_FILE" --output results
+# AI 탐지 실행 (Windows 환경에서 인코딩 문제 해결)
+if [ -f "venv/Scripts/activate" ]; then
+    # Windows 환경
+    python -X utf8 scripts/ai_unfair_detector.py --file "$INPUT_FILE" --output results
+else
+    # macOS/Linux 환경
+    python scripts/ai_unfair_detector.py --file "$INPUT_FILE" --output results
+fi
 
 echo "🎉 분석 완료!"
 echo "📁 결과는 results/analysis_YYYYMMDD_HHMMSS/ 폴더에 저장되었습니다."

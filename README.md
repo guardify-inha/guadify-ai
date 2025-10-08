@@ -70,7 +70,7 @@ docker run -d --name neo4j-guardify -p 7687:7687 -p 7474:7474 -e NEO4J_AUTH=neo4
 # macOS/Linux
 ./run_ai_detection.sh
 
-# Windows (PowerShell)
+# Windows (Git Bash/PowerShell)
 # .\run_ai_detection.sh
 # 또는
 # bash run_ai_detection.sh
