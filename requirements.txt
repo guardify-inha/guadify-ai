@@ -1,13 +1,13 @@
 # Core dependencies
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
-numpy==1.24.3
-pandas==2.0.3
-scikit-learn==1.3.0
+sentence-transformers>=2.7.0
+faiss-cpu==1.12.0
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.4.0
 
 # PDF processing
-PyMuPDF==1.23.8
-pdfplumber==0.9.0
+PyMuPDF>=1.24.0
+pdfplumber>=0.10.0
 
 # LLM and AI
 openai==1.3.0
