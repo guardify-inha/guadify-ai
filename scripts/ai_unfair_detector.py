@@ -4,8 +4,19 @@ AI 기반 불공정 약관 탐지 시스템
 LLM 핸들러를 활용한 맥락 기반 불공정 조항 탐지
 """
 
-import os
+# Windows 환경에서 인코딩 문제 해결
 import sys
+import os
+if sys.platform.startswith('win'):
+    import locale
+    import codecs
+    # UTF-8 인코딩 강제 설정
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
+    # 환경 변수 설정
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    os.environ['LANG'] = 'ko_KR.UTF-8'
+
 import json
 import logging
 from typing import Dict, List, Any

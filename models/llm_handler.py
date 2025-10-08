@@ -4,7 +4,19 @@ LLM 핸들러 모듈
 AI 모델을 활용한 불공정 약관 분석 및 판단을 위한 핵심 모듈
 """
 
+# Windows 환경에서 인코딩 문제 해결
+import sys
 import os
+if sys.platform.startswith('win'):
+    import locale
+    import codecs
+    # UTF-8 인코딩 강제 설정
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
+    # 환경 변수 설정
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    os.environ['LANG'] = 'ko_KR.UTF-8'
+
 import json
 import logging
 from typing import Dict, List, Any, Optional
@@ -154,9 +166,19 @@ class LLMHandler:
                 legal_context=context_text
             )
             
-            # 텍스트 인코딩 안전 처리
-            system_prompt_safe = self.system_prompt.encode('utf-8', errors='ignore').decode('utf-8')
-            user_prompt_safe = user_prompt.encode('utf-8', errors='ignore').decode('utf-8')
+            # 텍스트 인코딩 안전 처리 (특수 문자 제거)
+            def safe_encode(text):
+                # em dash, en dash 등 특수 문자를 일반 문자로 대체
+                text = text.replace('\u2014', '--')  # em dash
+                text = text.replace('\u2013', '-')   # en dash
+                text = text.replace('\u201c', '"')   # left double quotation mark
+                text = text.replace('\u201d', '"')   # right double quotation mark
+                text = text.replace('\u2018', "'")   # left single quotation mark
+                text = text.replace('\u2019', "'")   # right single quotation mark
+                return text.encode('utf-8', errors='ignore').decode('utf-8')
+            
+            system_prompt_safe = safe_encode(self.system_prompt)
+            user_prompt_safe = safe_encode(user_prompt)
             
             # LLM 호출 (최신 OpenAI API)
             response = self.client.chat.completions.create(
