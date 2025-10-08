@@ -148,18 +148,22 @@ class LLMHandler:
             # 법적 맥락 포맷팅
             context_text = self._format_legal_context(legal_context)
             
-            # 프롬프트 구성
+            # 프롬프트 구성 (인코딩 안전 처리)
             user_prompt = self.user_prompt_template.format(
                 clause_text=clause_text,
                 legal_context=context_text
             )
             
+            # 텍스트 인코딩 안전 처리
+            system_prompt_safe = self.system_prompt.encode('utf-8', errors='ignore').decode('utf-8')
+            user_prompt_safe = user_prompt.encode('utf-8', errors='ignore').decode('utf-8')
+            
             # LLM 호출 (최신 OpenAI API)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "system", "content": system_prompt_safe},
+                    {"role": "user", "content": user_prompt_safe}
                 ],
                 temperature=0.1,  # 낮은 온도로 일관성 확보
                 max_tokens=1000

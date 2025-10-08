@@ -10,6 +10,9 @@ echo "🤖 AI 기반 불공정 약관 탐지 시스템 실행"
 if [ -f "venv/Scripts/activate" ]; then
     # Windows (Git Bash)
     echo "🐍 Windows/Git Bash 환경을 감지했습니다. 가상 환경을 활성화합니다..."
+    # Windows 환경에서 인코딩 문제 해결
+    export PYTHONIOENCODING=utf-8
+    export LANG=ko_KR.UTF-8
     source venv/Scripts/activate
 elif [ -f "venv/bin/activate" ]; then
     # macOS/Linux
