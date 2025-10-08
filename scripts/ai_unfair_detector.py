@@ -216,8 +216,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='AI 기반 불공정 약관 탐지')
-    parser.add_argument('--file', help='분석할 약관 파일 경로', default='test_contract_mixed.txt')
-    parser.add_argument('--output', help='결과 출력 파일 경로')
+    parser.add_argument('--file', help='분석할 약관 파일 경로', default='test_inputs/sample_contract.txt')
     
     args = parser.parse_args()
     
@@ -263,16 +262,15 @@ def main():
             
             print()
     
-    # 파일 출력
-    if args.output:
-        # 타임스탬프 폴더 생성
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"results/analysis_{timestamp}"
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"결과 폴더 생성: {output_dir}")
-        
-        # 결과를 JSON으로 변환
-        json_result = {
+    # 파일 출력 (자동으로 results 폴더에 저장)
+    # 타임스탬프 폴더 생성
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = f"results/analysis_{timestamp}"
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info(f"결과 폴더 생성: {output_dir}")
+    
+    # 결과를 JSON으로 변환
+    json_result = {
             "input_text": result["input_text"],
             "unfair_count": result["unfair_count"],
             "total_clauses": result["total_clauses"],
@@ -301,20 +299,20 @@ def main():
                 }
                 for d in result["detection_results"] if d.analysis.is_unfair
             ]
-        }
-        
-        # JSON 파일 저장
-        json_file = os.path.join(output_dir, "ai_detection_result.json")
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(json_result, f, ensure_ascii=False, indent=2)
-        
-        # 마크다운 보고서 생성
-        markdown_file = os.path.join(output_dir, "analysis_report.md")
-        _generate_markdown_report(json_result, markdown_file)
-        
-        print(f"📁 결과가 {output_dir} 폴더에 저장되었습니다:")
-        print(f"   📄 JSON: {json_file}")
-        print(f"   📋 마크다운: {markdown_file}")
+    }
+    
+    # JSON 파일 저장
+    json_file = os.path.join(output_dir, "ai_detection_result.json")
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump(json_result, f, ensure_ascii=False, indent=2)
+    
+    # 마크다운 보고서 생성
+    markdown_file = os.path.join(output_dir, "analysis_report.md")
+    _generate_markdown_report(json_result, markdown_file)
+    
+    print(f"📁 결과가 {output_dir} 폴더에 저장되었습니다:")
+    print(f"   📄 JSON: {json_file}")
+    print(f"   📋 마크다운: {markdown_file}")
 
 def _generate_markdown_report(result: Dict[str, Any], output_file: str):
     """마크다운 보고서 생성"""

@@ -12,13 +12,17 @@ import faiss
 from tqdm import tqdm
 import csv
 
+# 현재 스크립트의 위치를 기준으로 경로 설정
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
 # 입력 / 출력 경로
-CHUNKS_FILE = os.path.join("..", "outputs", "chunks.jsonl")
+CHUNKS_FILE = os.path.join(PROJECT_ROOT, "outputs", "chunks.jsonl")
 EMBED_MODEL = "all-MiniLM-L6-v2"
-INDEX_FILE = os.path.join("..", "outputs", "faiss.index")
-META_FILE = os.path.join("..", "outputs", "faiss_meta.pkl")
-EMB_FILE = os.path.join("..", "outputs", "embeddings.npy")
-NODES_CSV = os.path.join("..", "outputs", "nodes.csv")
+INDEX_FILE = os.path.join(PROJECT_ROOT, "outputs", "faiss_v2.index")
+META_FILE = os.path.join(PROJECT_ROOT, "outputs", "faiss_v2_meta.pkl")
+EMB_FILE = os.path.join(PROJECT_ROOT, "outputs", "embeddings_v2.npy")
+NODES_CSV = os.path.join(PROJECT_ROOT, "outputs", "nodes_v2.csv")
 
 # 임베딩 모델 로드
 model = SentenceTransformer(EMBED_MODEL)
