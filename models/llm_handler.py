@@ -4,6 +4,35 @@ LLM 핸들러 모듈
 AI 모델을 활용한 불공정 약관 분석 및 판단을 위한 핵심 모듈
 """
 
+# ==============================================================================
+# ## 최후의 수단: httpx 라이브러리 몽키 패치 (Monkey Patch) ##
+# openai 라이브러리가 사용하는 httpx의 헤더 인코딩 오류를 강제로 수정합니다.
+# 이 코드는 다른 import 구문보다 가장 먼저 실행되어야 합니다.
+# ==============================================================================
+try:
+    import httpx._models
+
+    # 기존의 문제가 되는 함수
+    original_normalize_header_value = httpx._models._normalize_header_value
+
+    def safe_normalize_header_value(value, encoding: str | None) -> bytes:
+        """
+        헤더 값을 무조건 utf-8로 인코딩하여 UnicodeEncodeError를 방지하는 함수.
+        """
+        if isinstance(value, bytes):
+            return value
+        # 오류가 발생하는 value.encode(encoding or "ascii") 대신 utf-8로 강제
+        return str(value).encode("utf-8", errors="replace")
+
+    # httpx 라이브러리의 함수를 우리가 만든 안전한 함수로 교체합니다.
+    httpx._models._normalize_header_value = safe_normalize_header_value
+    print("✅ httpx 라이브러리 몽키 패치 적용 성공")
+
+except Exception as e:
+    print(f"❌ httpx 라이브러리 몽키 패치 적용 실패: {e}")
+# ==============================================================================
+
+
 import os
 import json
 import logging
@@ -47,28 +76,20 @@ class LLMHandler:
     """LLM을 활용한 불공정 약관 분석 핸들러"""
     
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        """
-        LLM 핸들러 초기화
-        
-        Args:
-            api_key: OpenAI API 키 (None이면 환경변수에서 로드)
-            model: 사용할 LLM 모델명
-        """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API 키가 설정되지 않았습니다. 환경변수 OPENAI_API_KEY를 설정하거나 api_key 파라미터를 제공하세요.")
         
         self.model = model
-        # OpenAI 클라이언트 초기화 (최신 버전 호환)
+        
+        # 클라이언트 초기화 (가장 기본적인 형태로 되돌립니다)
         try:
             self.client = openai.OpenAI(api_key=self.api_key)
         except Exception as e:
             logger.error(f"OpenAI 클라이언트 초기화 실패: {e}")
-            # 대안: 환경 변수 설정 방식
             os.environ["OPENAI_API_KEY"] = self.api_key
             self.client = openai.OpenAI()
-        
-        # 프롬프트 템플릿 설정
+            
         self.system_prompt = self._build_system_prompt()
         self.user_prompt_template = self._build_user_prompt_template()
         
@@ -78,39 +99,39 @@ class LLMHandler:
         """시스템 프롬프트 구성"""
         return """당신은 한국의 법률 전문가입니다. 계약 조항의 불공정성을 정확히 판단하는 것이 당신의 역할입니다.
 
-중요 지침:
-- 공정한 조항을 불공정으로 오탐하지 마세요
-- 문맥을 고려하여 종합적으로 판단하세요  
-- 소비자 보호 조항은 일반적으로 공정합니다
+## 중요 지침
+- **공정한 조항을 불공정으로 오탐하지 마세요**
+- **문맥을 고려하여 종합적으로 판단하세요**
+- **소비자 보호 조항은 일반적으로 공정합니다**
 
-불공정성 판단 기준:
+## 불공정성 판단 기준
 
-1. 일방적 불이익 조항
+### 1. 일방적 불이익 조항
 - 한 당사자에게만 불리한 조건
 - 예: "회사는 언제든지 해지할 수 있으나, 이용자는 사전 통지 없이 해지할 수 없다"
 
-2. 소비자 권리 제한
+### 2. 소비자 권리 제한
 - 소비자의 기본 권리를 제한하는 조항
 - 예: "이용자는 어떠한 경우에도 이의를 제기할 수 없다"
 
-3. 정보 제공 의무 회피
+### 3. 정보 제공 의무 회피
 - 중요한 정보를 제공하지 않는 조항
 - 예: "회사는 정보를 제공할 의무가 없다"
 
-4. 손해배상 제한
+### 4. 손해배상 제한
 - 과도한 손해배상 제한
 - 예: "회사는 어떠한 손해에 대해서도 배상하지 않는다"
 
-5. 계약 해지 제한
+### 5. 계약 해지 제한
 - 불공정한 해지 조건
 - 예: "이용자는 회사의 허락 없이는 해지할 수 없다"
 
-공정한 조항의 예시:
+## 공정한 조항의 예시
 - "이용자는 서비스 이용 중 발생한 피해에 대해 구제를 신청할 수 있습니다"
 - "회사는 신청을 받은 날로부터 30일 이내에 처리 결과를 통지합니다"
 - "양 당사자는 상호 합의하여 계약을 변경할 수 있습니다"
 
-출력 형식:
+## 출력 형식
 반드시 다음 JSON 형식으로 답변하세요:
 {
   "is_unfair": boolean,
@@ -148,13 +169,11 @@ class LLMHandler:
             # 법적 맥락 포맷팅
             context_text = self._format_legal_context(legal_context)
             
-            # 프롬프트 구성 (인코딩 안전 처리)
+            # 프롬프트 구성
             user_prompt = self.user_prompt_template.format(
                 clause_text=clause_text,
                 legal_context=context_text
             )
-            
-            # 프롬프트 구성
             
             # LLM 호출 (최신 OpenAI API)
             response = self.client.chat.completions.create(
@@ -175,7 +194,9 @@ class LLMHandler:
             return analysis_result
             
         except Exception as e:
+            import traceback
             logger.error(f"조항 분석 중 오류 발생: {e}")
+            logger.error(traceback.format_exc())
             return self._get_default_analysis()
     
     def _format_legal_context(self, legal_context: List[LegalContext]) -> str:
