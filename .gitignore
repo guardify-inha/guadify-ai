@@ -10,3 +10,5 @@ venv/
 outputs/
 *.pkl
 *.index
+
+.env
