@@ -35,4 +35,9 @@ node_modules/
 
 # Task files
 .taskmaster/
+
+# Cursor IDE files
 .cursor/
+
+# Temporary archive files
+temp_archive/
