@@ -85,7 +85,7 @@ def call_gpt_structure(text, max_retries=3):
   "불공정조항": "...",
   "시정이유": "...",
   "관련법조항": "...",
-  "출처": "..."
+  "출처": "...",
 }}
 
 텍스트:
@@ -115,8 +115,12 @@ def process_pdf_file(path, source_tag, structured_out=None):
     fname = os.path.basename(path)
     chunk_idx = 0
 
+    full_text = "\n".join([p.get_text() for p in doc if p.get_text()])
+    if not full_text.strip():
+        print(f"⚠️ {fname}: PDF에서 텍스트를 추출하지 못했습니다.")
+        return
+
     if source_tag == "reference":
-        full_text = "\n".join([p.get_text() for p in doc if p.get_text()])
         clauses = split_by_clause(full_text)
         batch = ""
         for clause in clauses:
@@ -160,7 +164,6 @@ def process_pdf_file(path, source_tag, structured_out=None):
             chunk_idx += 1
 
     elif source_tag == "law":
-        full_text = "\n".join([p.get_text() for p in doc if p.get_text()])
         for art in split_by_article_with_titles(full_text):
             title = art["title"]
             for s in split_sentences_kss(art["body"]):
@@ -174,8 +177,9 @@ def process_pdf_file(path, source_tag, structured_out=None):
                 }
 
     elif source_tag == "standard":
-        full_text = "\n".join([p.get_text() for p in doc if p.get_text()])
-        for art in split_by_article_with_titles(full_text):
+        arts = split_by_article_with_titles(full_text)
+        print(f"{fname}: found {len(arts)} standard articles")  # 디버그
+        for art in arts:
             yield {
                 "chunk_id": str(uuid.uuid4()),
                 "source_file": fname,
