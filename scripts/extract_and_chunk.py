@@ -1,9 +1,11 @@
 # File: scripts/extract_and_chunk.py
 """
-Enhanced chunk extractor + GPT structuring (batch)
-- reference → clause 단위로 쪼갠 후 MAX_CHARS_FOR_GPT 단위로 묶어서 GPT 요청
+Enhanced chunk extractor
+- reference → CSV 기반 직접 구조화
 - law → 문장 단위
 - standard → 제n조 단위
+- Mecab backend 강제 사용
+- 이미 처리된 파일은 건너뜀
 Outputs:
   1. ../outputs/chunks.jsonl
   2. ../outputs/structured_reference.jsonl
@@ -13,17 +15,13 @@ import os
 import json
 import uuid
 import re
-import time
+import csv
 import fitz  # PyMuPDF
 from tqdm import tqdm
 import kss
-from dotenv import load_dotenv
-from openai import OpenAI
 
-# -------------------- 초기 설정 --------------------
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# -------------------- 경로 설정 --------------------
 DATA_ROOT = os.path.join("..", "data")
 CONTRACTS_REF_DIR = os.path.join(DATA_ROOT, "contracts", "reference")
 LAW_DIR = os.path.join(DATA_ROOT, "law")
@@ -36,14 +34,14 @@ STRUCTURED_FILE = os.path.join(OUT_DIR, "structured_reference.jsonl")
 CLAUSE_START_RE = re.compile(r"^\s*(\d+\)|[가-힣]\.)\s*", re.MULTILINE)
 ARTICLE_RE = re.compile(r"(제\s*\d+\s*조[^\n\r]*)", flags=re.MULTILINE)
 
-MAX_CHARS_FOR_GPT = 3000  # GPT 호출 글자 단위
-
 # -------------------- 유틸 --------------------
 def split_sentences_kss(text):
     try:
-        return [s.strip() for s in kss.split_sentences(text) if s.strip()]
+        # Mecab backend 사용
+        return [s.strip() for s in kss.split_sentences(text, backend="mecab") if s.strip()]
     except Exception:
         return [text]
+
 
 def split_by_clause(text):
     text = text.replace("\r\n", "\n")
@@ -73,97 +71,38 @@ def split_by_article_with_titles(text):
         results.append({"title": title, "body": body})
     return results
 
-# -------------------- GPT 구조화 --------------------
-def call_gpt_structure(text, max_retries=3):
-    text_to_send = text[:MAX_CHARS_FOR_GPT]
-    prompt = f"""
-다음은 공정거래위원회의 약관 시정 보도자료 일부입니다.
-아래 텍스트에서 불공정조항, 시정이유, 관련법조항, 출처를 JSON으로 구조화하세요.
-
-출력 형식 (반드시 이 형태로만):
-{{
-  "불공정조항": "...",
-  "시정이유": "...",
-  "관련법조항": "...",
-  "출처": "...",
-}}
-
-텍스트:
-{text_to_send}
-    """
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
-                temperature=0.2,
-            )
-            content = response.choices[0].message.content
-            if not content or not content.strip():
-                raise ValueError("Empty GPT response")
-            content = re.sub(r"^```json|```$", "", content.strip())
-            return json.loads(content)
-        except Exception as e:
-            print(f"⚠️ GPT 구조화 실패 (시도 {attempt+1}/{max_retries}): {e}")
-            time.sleep(2)
-    return None
+# -------------------- CSV 기반 Reference 처리 --------------------
+def process_reference_csv(csv_path):
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # 필드: ID, 파일명, 대주제, 소주제, 불공정약관원문, 시정요청사유, 근거조항, 수정후약관조항
+            rec = {
+                "chunk_id": str(uuid.uuid4()),
+                "source_file": row.get("파일명"),
+                "source_tag": "reference",
+                "level": "reference_clause",
+                "ID": row.get("ID"),
+                "대주제": row.get("대주제"),
+                "소주제": row.get("소주제"),
+                "불공정약관원문": row.get("불공정약관원문"),
+                "시정요청사유": row.get("시정요청사유"),
+                "근거조항": row.get("근거조항"),
+                "수정후약관조항": row.get("수정후약관조항"),
+            }
+            yield rec
 
 # -------------------- PDF 처리 --------------------
-def process_pdf_file(path, source_tag, structured_out=None):
+def process_pdf_file(path, source_tag):
     doc = fitz.open(path)
     fname = os.path.basename(path)
-    chunk_idx = 0
 
     full_text = "\n".join([p.get_text() for p in doc if p.get_text()])
     if not full_text.strip():
         print(f"⚠️ {fname}: PDF에서 텍스트를 추출하지 못했습니다.")
         return
 
-    if source_tag == "reference":
-        clauses = split_by_clause(full_text)
-        batch = ""
-        for clause in clauses:
-            if len(batch + clause) > MAX_CHARS_FOR_GPT:
-                chunk_id = str(uuid.uuid4())
-                rec = {
-                    "chunk_id": chunk_id,
-                    "source_file": fname,
-                    "source_tag": source_tag,
-                    "level": "clause_batch",
-                    "chunk_idx": chunk_idx,
-                    "text": batch,
-                }
-                chunk_idx += 1
-                yield rec
-                if structured_out:
-                    structured = call_gpt_structure(batch)
-                    if structured:
-                        structured["chunk_id"] = chunk_id
-                        structured["source_file"] = fname
-                        structured_out.write(json.dumps(structured, ensure_ascii=False) + "\n")
-                batch = ""
-            batch += clause + "\n"
-        if batch:
-            chunk_id = str(uuid.uuid4())
-            rec = {
-                "chunk_id": chunk_id,
-                "source_file": fname,
-                "source_tag": source_tag,
-                "level": "clause_batch",
-                "chunk_idx": chunk_idx,
-                "text": batch,
-            }
-            yield rec
-            if structured_out:
-                structured = call_gpt_structure(batch)
-                if structured:
-                    structured["chunk_id"] = chunk_id
-                    structured["source_file"] = fname
-                    structured_out.write(json.dumps(structured, ensure_ascii=False) + "\n")
-            chunk_idx += 1
-
-    elif source_tag == "law":
+    if source_tag == "law":
         for art in split_by_article_with_titles(full_text):
             title = art["title"]
             for s in split_sentences_kss(art["body"]):
@@ -178,7 +117,7 @@ def process_pdf_file(path, source_tag, structured_out=None):
 
     elif source_tag == "standard":
         arts = split_by_article_with_titles(full_text)
-        print(f"{fname}: found {len(arts)} standard articles")  # 디버그
+        print(f"{fname}: found {len(arts)} standard articles")
         for art in arts:
             yield {
                 "chunk_id": str(uuid.uuid4()),
@@ -194,28 +133,45 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     file_list = []
 
-    for d, tag in [
-        (CONTRACTS_REF_DIR, "reference"),
-        (LAW_DIR, "law"),
-        (STANDARD_DIR, "standard"),
-    ]:
+    # 이미 처리된 파일 확인
+    processed_files = set()
+    if os.path.exists(OUT_FILE):
+        with open(OUT_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                    processed_files.add(obj.get("source_file"))
+                except:
+                    continue
+
+    # CSV reference 처리
+    for f in os.listdir(CONTRACTS_REF_DIR):
+        if f.lower().endswith(".csv") and f not in processed_files:
+            file_list.append((os.path.join(CONTRACTS_REF_DIR, f), "reference"))
+
+    # PDF law / standard 처리
+    for d, tag in [(LAW_DIR, "law"), (STANDARD_DIR, "standard")]:
         if os.path.isdir(d):
-            file_list += [
-                (os.path.join(d, f), tag)
-                for f in os.listdir(d)
-                if f.lower().endswith(".pdf")
-            ]
+            for f in os.listdir(d):
+                if f.lower().endswith(".pdf") and f not in processed_files:
+                    file_list.append((os.path.join(d, f), tag))
 
     if not file_list:
-        print("❌ No PDF files found.")
+        print("❌ 처리할 파일이 없습니다. 이미 모두 완료됨.")
         return
 
-    with open(OUT_FILE, "w", encoding="utf-8") as outf, \
-         open(STRUCTURED_FILE, "w", encoding="utf-8") as structured_out:
-        for path, tag in tqdm(file_list, desc="Processing PDFs"):
+    with open(OUT_FILE, "a", encoding="utf-8") as outf, \
+         open(STRUCTURED_FILE, "a", encoding="utf-8") as structured_out:
+        for path, tag in tqdm(file_list, desc="Processing Files"):
             try:
-                for rec in process_pdf_file(path, tag, structured_out):
-                    outf.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                if tag == "reference":
+                    for rec in process_reference_csv(path):
+                        outf.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                        structured_out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                else:
+                    for rec in process_pdf_file(path, tag):
+                        outf.write(json.dumps(rec, ensure_ascii=False) + "\n"
+                        )
             except Exception as e:
                 print(f"⚠️ Error processing {path}: {e}")
 
