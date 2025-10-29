@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:latest
+    container_name: unfair-terms-neo4j
+    ports:
+      - "7474:7474"  # HTTP (브라우저)
+      - "7687:7687"  # Bolt (Python 연결)
+    environment:
+      - NEO4J_AUTH=neo4j/testpassword123
+      - NEO4J_PLUGINS=["apoc"]  # APOC 플러그인 (나중에 유용)
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    restart: unless-stopped
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
