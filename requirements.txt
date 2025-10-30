@@ -1,2 +1,13 @@
 neo4j==5.14.1
 python-dotenv==1.0.0
+PyMuPDF
+sentence-transformers
+faiss-cpu
+numpy
+scikit-learn
+tqdm
+nltk
+pdfplumber
+transformers
+huggingface_hub
+streamlit
