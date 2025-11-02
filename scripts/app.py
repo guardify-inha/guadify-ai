@@ -37,6 +37,8 @@ if run_btn:
             result = judge_run(user_text)
         except Exception as e:
             st.error(f"실행 오류: {e}")
+            import traceback
+            st.code(traceback.format_exc())
             st.stop()
 
     violation = result.get("violation")
@@ -53,27 +55,27 @@ if run_btn:
         st.subheader("판단 결과")
         st.metric(label="위반 여부", value=status)
         st.write(f"신뢰 점수: **{score:.2f}**")
+        st.write(f"조항: **{result.get('article_id', 'N/A')}**")
+        st.write(f"심각도: **{result.get('severity', 'N/A')}**")
 
     with col2:
         st.subheader("설명")
         st.write(explanation)
 
     st.markdown("---")
-    st.subheader("근거 조문(상위 5개)")
+    st.subheader("근거 조문/사례")
 
     if not reasons:
         st.info("근거 후보가 없습니다. 입력 문장을 다시 시도하세요.")
     else:
         for i, r in enumerate(reasons[:5], start=1):
-            level = r.get("level")
-            rid = r.get("id")
-            article_id = r.get("article_id")
-            hang_num = r.get("hang_num")
-            ho_num = r.get("ho_num")
+            level = r.get("level", "")
+            rid = r.get("id", "")
+            article_id = r.get("article_id", "")
             snippet = (r.get("snippet") or "").strip()
-            sc = r.get("score")
+            sc = r.get("score", 0)
 
-            header = f"{i}. [{level}] {article_id or ''} {hang_num or ''} {ho_num or ''} ({sc:.2f})".strip()
+            header = f"{i}. [{level}] {article_id} - {rid} (유사도: {sc:.2f})".strip()
             with st.expander(header, expanded=(i == 1)):
                 st.write(snippet)
 
