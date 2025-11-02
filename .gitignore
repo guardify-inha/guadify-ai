@@ -1,1 +1,43 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
 venv/
+.env
+
+# Project outputs
+outputs/
+results/
+*.pkl
+*.index
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+# Dependency directories
+node_modules/
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+
+# Task files
+.taskmaster/
+
+# Cursor IDE files
+.cursor/
+
+# Temporary archive files
+temp_archive/

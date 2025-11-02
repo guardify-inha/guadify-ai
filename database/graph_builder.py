@@ -52,6 +52,10 @@ class GraphBuilder:
         """
         조 및 하위 항, 호 구조 생성
         
+        새로운 구조:
+        - 제6조: 조-항-호 구조
+        - 제7조~제14조: 조-호 구조 (항 없이 조에서 직접 호로 연결) 또는 조 단독
+        
         Args:
             law_id: 법률 ID
             article_id: 조 ID (예: "제6조")
@@ -62,18 +66,28 @@ class GraphBuilder:
             law_id, article_id, article_data["title"], article_data["content"]
         )
         
-        # 2. 항 노드 생성
-        for hang_id, hang_data in article_data["항들"].items():
-            hang_node_id = self.create_hang_node(
-                article_node_id, article_id, hang_id, hang_data["content"]
-            )
-            
-            # 3. 호 노드 생성 (있는 경우)
-            if hang_data["호들"]:
-                for ho_id, ho_content in hang_data["호들"].items():
-                    self.create_ho_node(
-                        hang_node_id, article_id, hang_id, ho_id, ho_content
-                    )
+        # 2. 항이 있는 경우: 조-항-호 구조 (제6조만)
+        if article_data.get("항들"):
+            for hang_id, hang_data in article_data["항들"].items():
+                hang_node_id = self.create_hang_node(
+                    article_node_id, article_id, hang_id, hang_data["content"]
+                )
+                
+                # 항 아래 호 노드 생성
+                if hang_data.get("호들"):
+                    for ho_id, ho_content in hang_data["호들"].items():
+                        self.create_ho_node(
+                            hang_node_id, article_id, hang_id, ho_id, ho_content
+                        )
+        
+        # 3. 항이 없고 호가 있는 경우: 조-호 직접 연결 (제7조, 제9조~제12조, 제14조)
+        elif article_data.get("호들"):
+            for ho_id, ho_content in article_data["호들"].items():
+                self.create_ho_node_direct(
+                    article_node_id, article_id, ho_id, ho_content
+                )
+        
+        # 4. 항도 호도 없는 경우: 조 단독 구조 (제8조, 제13조) - 아무것도 하지 않음
     
     def create_article_node(self, law_id, article_id, title, content):
         """조 노드 생성 및 법률과 연결"""
@@ -118,12 +132,13 @@ class GraphBuilder:
         return result[0]["id"]
     
     def create_ho_node(self, hang_id, article_num, hang_num, ho_id, content):
-        """호 노드 생성 및 항과 연결"""
+        """호 노드 생성 및 항과 연결 (조-항-호 구조용)"""
         query = """
         MATCH (hang:항 {id: $hang_id})
         CREATE (ho:호 {
             id: $ho_full_id,
             hang_id: $hang_id,
+            article_id: $article_id,
             ho_num: $ho_id,
             content: $content
         })
@@ -133,6 +148,29 @@ class GraphBuilder:
         ho_full_id = f"{article_num}_{hang_num}_{ho_id}"
         self.connector.execute_query(query, {
             "hang_id": hang_id,
+            "article_id": article_num,
+            "ho_full_id": ho_full_id,
+            "ho_id": ho_id,
+            "content": content
+        })
+    
+    def create_ho_node_direct(self, article_id, article_num, ho_id, content):
+        """호 노드 생성 및 조와 직접 연결 (조-호 구조용)"""
+        query = """
+        MATCH (article:조 {id: $article_id})
+        CREATE (ho:호 {
+            id: $ho_full_id,
+            article_id: $article_id,
+            hang_id: null,
+            ho_num: $ho_id,
+            content: $content
+        })
+        CREATE (article)-[:HAS_HO]->(ho)
+        RETURN ho.id as id
+        """
+        ho_full_id = f"{article_num}_{ho_id}"
+        self.connector.execute_query(query, {
+            "article_id": article_id,
             "ho_full_id": ho_full_id,
             "ho_id": ho_id,
             "content": content
