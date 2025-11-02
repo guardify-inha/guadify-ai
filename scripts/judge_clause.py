@@ -9,7 +9,7 @@
 import re
 import sys
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 import numpy as np
 
@@ -24,6 +24,8 @@ except Exception:
     pass
 
 from database.neo4j_connector import Neo4jConnector
+from utils.llm_client import get_llm_client
+from config.settings import settings
 
 # =============================================================================
 # 임베딩 모델 로드
@@ -106,6 +108,66 @@ def detect_best_article(text: str) -> str:
 # =============================================================================
 # Neo4j 조회
 # =============================================================================
+def query_law_content(conn: Neo4jConnector, article_id: str) -> Dict[str, Any]:
+    """
+    법률 조문 내용 조회 (조, 항, 호 포함)
+    
+    Args:
+        conn: Neo4j 연결 객체
+        article_id: 조항 ID (예: "제7조")
+        
+    Returns:
+        조문 내용 딕셔너리
+    """
+    query = """
+    MATCH (a:조 {id: $article_id})
+    OPTIONAL MATCH (a)-[:HAS_HANG]->(h:항)
+    OPTIONAL MATCH (a)-[:HAS_HO]->(ho:호)
+    OPTIONAL MATCH (h)-[:HAS_HO]->(ho2:호)
+    WITH a, 
+         collect(DISTINCT {id: h.id, num: h.hang_num, content: h.content}) as hang_list,
+         collect(DISTINCT {id: ho.id, num: ho.ho_num, content: ho.content}) as ho_from_article,
+         collect(DISTINCT {id: ho2.id, num: ho2.ho_num, content: ho2.content}) as ho_from_hang
+    RETURN a.id as article_id,
+           a.title as title,
+           a.content as content,
+           hang_list,
+           ho_from_article,
+           ho_from_hang
+    """
+    
+    result = conn.execute_query(query, {"article_id": article_id})
+    
+    if not result:
+        return {
+            "article_id": article_id,
+            "title": "",
+            "content": "",
+            "hangs": [],
+            "hos": []
+        }
+    
+    row = result[0]
+    
+    # 호 통합 (조에서 직접 연결된 호 + 항에서 연결된 호)
+    all_hos = (row.get('ho_from_article', []) or []) + (row.get('ho_from_hang', []) or [])
+    # 중복 제거
+    unique_hos = []
+    seen_ho_ids = set()
+    for ho in all_hos:
+        if ho and ho.get('id') and ho['id'] not in seen_ho_ids:
+            unique_hos.append(ho)
+            seen_ho_ids.add(ho['id'])
+    
+    return {
+        "article_id": row.get('article_id', article_id),
+        "title": row.get('title', ''),
+        "content": row.get('content', ''),
+        "hangs": row.get('hang_list', []) or [],
+        "hos": unique_hos
+    }
+
+
 def query_violation_cases(conn: Neo4jConnector, article_id: str) -> List[Dict]:
     query = """
     MATCH (a:조 {id: $article_id})
@@ -206,6 +268,198 @@ def calculate_contrastive_score(user_text: str, best_case: Dict) -> float:
     return float(min(max(position, 0.0), 1.0))
 
 # =============================================================================
+# Text2Cypher: 자연어 입력을 Cypher 쿼리로 변환
+# =============================================================================
+def analyze_clause_with_llm(clause_text: str) -> Optional[Dict]:
+    """
+    LLM으로 입력 조항을 분석하여 관련 조항 및 검색 조건 추출
+    
+    Args:
+        clause_text: 검사할 약관 조항 텍스트
+        
+    Returns:
+        분석 결과 딕셔너리 또는 None
+    """
+    llm = get_llm_client()
+    if not llm:
+        return None
+    
+    prompt = f"""
+다음 약관 조항을 분석해서 관련된 약관법 조항과 검색 조건을 판단하세요.
+
+입력 조항:
+"{clause_text}"
+
+약관법 조항 설명:
+- 제6조: 일반원칙 (부당하게 불리한 조항, 예상하기 어려운 조항, 본질적 권리 제한)
+- 제7조: 면책조항의 금지 (책임 면제, 배상 배제, 담보 책임 제한)
+- 제8조: 손해배상액의 예정 (과도한 손해배상, 지연 배상, 위약금)
+- 제9조: 해제·해지의 제한 (고객의 해제권·해지권 부당 제한)
+- 제10조: 급부 내용의 일방적 변경·중지 (일방적 계약 변경, 급부 중지)
+- 제11조: 기한의 이익 박탈 및 항변권·상계권 제한
+- 제12조: 의사표시의 간주·의제 (고객의 의사표시를 임의로 간주)
+- 제13조: 대리인의 책임 (대리인에게 과도한 책임 전가)
+- 제14조: 소송 제기의 금지 및 입증책임 전가
+
+JSON 형식으로 응답:
+{{
+    "article_id": "제7조",
+    "confidence": 0.9,
+    "violation_types": ["면책", "전면책임배제"],
+    "keywords": ["책임", "배상", "면책"],
+    "search_strategy": "면책 관련 모든 위반사례 검색",
+    "special_conditions": ["고의·중과실 책임 제외 여부 확인"]
+}}
+"""
+    
+    result = llm.generate_json(prompt)
+    return result
+
+
+def text2cypher_query(clause_text: str, article_id: str, analysis: Optional[Dict] = None) -> Optional[str]:
+    """
+    Text2Cypher: 자연어 입력을 기반으로 Cypher 쿼리 생성
+    
+    Args:
+        clause_text: 검사할 약관 조항 텍스트
+        article_id: 관련 조항 ID
+        analysis: LLM 분석 결과 (선택)
+        
+    Returns:
+        Cypher 쿼리 문자열 또는 None
+    """
+    llm = get_llm_client()
+    if not llm:
+        return None
+    
+    if not analysis:
+        analysis = analyze_clause_with_llm(clause_text)
+        if not analysis:
+            return None
+        article_id = analysis.get('article_id', article_id)
+    
+    system_prompt = """당신은 Neo4j Cypher 쿼리 전문가입니다. 
+정확하고 안전한 Cypher 쿼리만 생성하세요. 
+설명 없이 쿼리만 반환하세요."""
+
+    prompt = f"""
+다음 조건으로 위반사례를 검색하는 Cypher 쿼리를 생성하세요.
+
+조건:
+- 관련 조항: {article_id}
+- 검사 대상 조항: "{clause_text}"
+- 검색 유형: {analysis.get('violation_types', [])}
+- 키워드: {analysis.get('keywords', [])}
+
+Neo4j 그래프 스키마:
+노드:
+- 법률: {{id, name}}
+- 조: {{id, title, content}}
+- 항: {{id, article_id, hang_num, content}}
+- 호: {{id, article_id, hang_id, ho_num, content}}
+- 위반사례: {{id, unfair_text, reason, embedding}}
+- 수정본: {{id, corrected_text, embedding}}
+
+관계:
+- (법률)-[:HAS_ARTICLE]->(조)
+- (조)-[:HAS_HANG]->(항)
+- (조)-[:HAS_HO]->(호)
+- (항)-[:HAS_HO]->(호)
+- (조)-[:HAS_VIOLATION]->(위반사례)
+- (항)-[:HAS_VIOLATION]->(위반사례)
+- (호)-[:HAS_VIOLATION]->(위반사례)
+- (위반사례)-[:HAS_CORRECTION]->(수정본)
+
+요구사항:
+1. {article_id} 조항과 연결된 모든 위반사례를 찾기
+2. 위반사례의 수정본(corrected_text, embedding)도 함께 가져오기
+3. 위반사례의 unfair_text, reason, embedding도 포함
+4. 위반사례 ID는 violation_id로 반환
+5. LIMIT 50으로 제한
+
+반환 형식:
+- violation_id
+- violation_text (unfair_text)
+- reason
+- violation_embedding
+- correction_text
+- correction_embedding
+
+Cypher 쿼리만 반환하세요 (설명 없이):
+"""
+    
+    cypher = llm.generate(prompt, system_prompt, temperature=0.1)
+    
+    if cypher:
+        # 코드 블록 제거
+        cypher = cypher.strip()
+        if cypher.startswith("```cypher"):
+            cypher = cypher[9:]
+        elif cypher.startswith("```"):
+            cypher = cypher[3:]
+        if cypher.endswith("```"):
+            cypher = cypher[:-3]
+        cypher = cypher.strip()
+    
+    return cypher
+
+
+def query_violation_cases_text2cypher(conn: Neo4jConnector, clause_text: str, 
+                                     article_id: Optional[str] = None) -> List[Dict]:
+    """
+    Text2Cypher를 사용하여 위반사례 검색
+    
+    Args:
+        conn: Neo4j 연결 객체
+        clause_text: 검사할 약관 조항 텍스트
+        article_id: 관련 조항 ID (선택, 없으면 LLM으로 분석)
+        
+    Returns:
+        위반사례 리스트
+    """
+    # LLM으로 조항 분석
+    analysis = analyze_clause_with_llm(clause_text)
+    if not analysis:
+        # LLM 실패 시 기존 방식으로 폴백
+        if article_id:
+            return query_violation_cases(conn, article_id)
+        return []
+    
+    if not article_id:
+        article_id = analysis.get('article_id')
+    
+    # Text2Cypher로 쿼리 생성
+    cypher = text2cypher_query(clause_text, article_id, analysis)
+    if not cypher:
+        # 쿼리 생성 실패 시 기존 방식으로 폴백
+        return query_violation_cases(conn, article_id)
+    
+    try:
+        # 생성된 쿼리 실행
+        result = conn.execute_query(cypher)
+        
+        # 결과 형식 변환 (일관성 유지)
+        formatted_results = []
+        for row in result:
+            formatted_results.append({
+                'violation_id': row.get('violation_id'),
+                'violation_text': row.get('violation_text') or row.get('unfair_text'),
+                'reason': row.get('reason'),
+                'violation_embedding': row.get('violation_embedding'),
+                'correction_text': row.get('correction_text'),
+                'correction_embedding': row.get('correction_embedding')
+            })
+        
+        return formatted_results
+        
+    except Exception as e:
+        print(f"⚠️ Text2Cypher 쿼리 실행 실패: {e}")
+        print(f"생성된 쿼리: {cypher[:200]}...")
+        # 실패 시 기존 방식으로 폴백
+        return query_violation_cases(conn, article_id)
+
+
+# =============================================================================
 # 규칙/하드룰 보정 도구
 # =============================================================================
 NEGATION_WORDS = ["않", "없", "아니", "못", "금지", "면책", "배제", "제외"]
@@ -222,33 +476,287 @@ def detect_hard_violation(text: str) -> Optional[re.Match]:
     return None
 
 # =============================================================================
+# RAG 컨텍스트 구성 (Augmentation)
+# =============================================================================
+def format_law_content(law_content: Dict) -> str:
+    """법률 조문 내용을 텍스트로 포맷팅"""
+    text = f"\n[관련 조문: {law_content.get('article_id', '')}]"
+    
+    if law_content.get('title'):
+        text += f"\n제목: {law_content['title']}"
+    
+    if law_content.get('content'):
+        text += f"\n내용: {law_content['content']}"
+    
+    # 항들
+    hangs = law_content.get('hangs', [])
+    if hangs:
+        text += "\n\n항:"
+        for hang in hangs:
+            if hang and hang.get('content'):
+                hang_num = hang.get('num', '')
+                text += f"\n  {hang_num}: {hang['content']}"
+                
+                # 항에 연결된 호
+                # (호는 별도로 조회되지 않으므로 생략)
+    
+    # 호들
+    hos = law_content.get('hos', [])
+    if hos:
+        text += "\n\n호:"
+        for ho in hos:
+            if ho and ho.get('content'):
+                ho_num = ho.get('num', '')
+                text += f"\n  {ho_num}: {ho['content']}"
+    
+    return text
+
+
+def build_rag_context(user_text: str, best_case: Optional[Dict], article_id: str,
+                     law_content: Dict, conn: Neo4jConnector) -> str:
+    """
+    RAG를 위한 컨텍스트 구성 (Augmentation)
+    
+    Args:
+        user_text: 사용자 입력 조항
+        best_case: 가장 유사한 위반 사례
+        article_id: 관련 조항 ID
+        law_content: 법률 조문 내용
+        conn: Neo4j 연결 객체
+        
+    Returns:
+        구조화된 컨텍스트 문자열
+    """
+    context_parts = []
+    
+    # 1. 검사 대상 조항
+    context_parts.append("=" * 60)
+    context_parts.append("검사 대상 조항")
+    context_parts.append("=" * 60)
+    context_parts.append(f'"{user_text}"')
+    context_parts.append("")
+    
+    # 2. 관련 법률 조문
+    context_parts.append("=" * 60)
+    context_parts.append("관련 약관법 조문")
+    context_parts.append("=" * 60)
+    context_parts.append(format_law_content(law_content))
+    context_parts.append("")
+    
+    # 3. 유사한 위반 사례 (있는 경우)
+    if best_case:
+        context_parts.append("=" * 60)
+        context_parts.append("유사한 위반 사례")
+        context_parts.append("=" * 60)
+        
+        violation_text = best_case.get('violation_text', '') or best_case.get('unfair_text', '')
+        if violation_text:
+            context_parts.append(f"원문: {violation_text}")
+        
+        reason = best_case.get('reason', '')
+        if reason:
+            context_parts.append(f"시정 사유: {reason}")
+        
+        correction_text = best_case.get('correction_text', '')
+        if correction_text:
+            context_parts.append(f"수정 후: {correction_text}")
+        
+        similarity = best_case.get('similarity', 0.0)
+        context_parts.append(f"유사도 점수: {similarity:.2f}")
+        context_parts.append("")
+    else:
+        context_parts.append("=" * 60)
+        context_parts.append("유사한 위반 사례")
+        context_parts.append("=" * 60)
+        context_parts.append("데이터베이스에서 유사한 위반 사례를 찾을 수 없습니다.")
+        context_parts.append("")
+    
+    # 4. 판단 관련 정보
+    context_parts.append("=" * 60)
+    context_parts.append("판단 정보")
+    context_parts.append("=" * 60)
+    context_parts.append(f"관련 조항: {article_id}")
+    
+    if best_case:
+        contrastive = calculate_contrastive_score(user_text, best_case)
+        unfairness = 1 - contrastive
+        context_parts.append(f"불공정도: {unfairness:.2f}")
+        context_parts.append(f"유사도: {best_case.get('similarity', 0.0):.2f}")
+    
+    return "\n".join(context_parts)
+
+
+# =============================================================================
+# LLM 기반 Generation (설명 및 제안 생성)
+# =============================================================================
+def llm_generate_explanation(user_text: str, rag_context: str, violation: bool,
+                             final_score: float, base_sim: float, article_id: str) -> str:
+    """
+    LLM을 사용하여 불공정 판단 설명 생성 (Generation)
+    
+    Args:
+        user_text: 검사 대상 조항
+        rag_context: RAG 컨텍스트 (Augmentation 결과)
+        violation: 위반 여부
+        final_score: 최종 불공정도 점수
+        base_sim: 기본 유사도 점수
+        article_id: 관련 조항 ID
+        
+    Returns:
+        설명 텍스트 (LLM 실패 시 기본 설명 반환)
+    """
+    llm = get_llm_client()
+    if not llm:
+        # LLM 없으면 기본 설명 반환
+        if violation:
+            return f"입력문구는 약관법상 불공정한 표현으로 판단됩니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
+        else:
+            return f"현재 DB/규칙 기준으로는 불공정 여부가 명확하지 않습니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
+    
+    system_prompt = """당신은 약관법 전문가입니다. 
+약관법에 대한 정확한 지식을 바탕으로 조항의 불공정 여부를 판단하고 설명해야 합니다.
+한국어로 명확하고 전문적인 설명을 제공하세요."""
+
+    prompt = f"""
+다음 정보를 바탕으로 약관 조항의 불공정 여부를 판단하고 상세히 설명해주세요.
+
+{rag_context}
+
+판단 결과:
+- 위반 여부: {'위반' if violation else '비위반/불명확'}
+- 불공정도 점수: {final_score:.2f} (0.0 = 공정함, 1.0 = 매우 불공정함)
+- 유사도 점수: {base_sim:.2f}
+
+다음 사항을 포함하여 설명해주세요:
+1. 해당 조항이 약관법의 어떤 조문(특히 {article_id})과 관련있는지
+2. 왜 불공정한지 (또는 불공정하지 않은지) 구체적인 이유
+3. 유사한 위반 사례와의 비교 (있는 경우)
+4. 관련 법률 조문의 어떤 부분이 적용되는지
+
+설명은 전문적이면서도 이해하기 쉬워야 합니다.
+"""
+    
+    explanation = llm.generate(prompt, system_prompt, temperature=0.3, max_tokens=800)
+    
+    if explanation:
+        return explanation.strip()
+    else:
+        # LLM 실패 시 기본 설명
+        if violation:
+            return f"입력문구는 약관법상 불공정한 표현으로 판단됩니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
+        else:
+            return f"현재 DB/규칙 기준으로는 불공정 여부가 명확하지 않습니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
+
+
+def llm_generate_suggestion(user_text: str, article_id: str, rag_context: str,
+                           correction_example: Optional[str] = None) -> str:
+    """
+    LLM을 사용하여 수정 제안 생성 (Generation)
+    
+    Args:
+        user_text: 검사 대상 조항 (원문)
+        article_id: 관련 조항 ID
+        rag_context: RAG 컨텍스트
+        correction_example: 참고할 수정 사례 (선택)
+        
+    Returns:
+        수정 제안 텍스트 (LLM 실패 시 기본 제안 반환)
+    """
+    llm = get_llm_client()
+    if not llm:
+        # LLM 없으면 기본 제안 반환
+        return get_suggestion(article_id)
+    
+    system_prompt = """당신은 약관법 전문가이자 법률 문서 작성 전문가입니다.
+약관법에 맞게 조항을 수정하는 제안을 제공해야 합니다.
+한국어로 명확하고 실용적인 제안을 제공하세요."""
+
+    prompt = f"""
+다음 불공정 약관 조항을 약관법에 맞게 수정하여 제안해주세요.
+
+{rag_context}
+
+원문 조항:
+"{user_text}"
+
+"""
+    
+    if correction_example:
+        prompt += f"""
+참고할 올바른 수정 사례:
+"{correction_example}"
+
+"""
+    
+    prompt += f"""
+다음 사항을 포함하여 수정 제안을 작성해주세요:
+1. 수정된 조항 텍스트 (원문의 문제점을 해결한 버전)
+2. 왜 그렇게 수정했는지 간단한 설명
+3. 약관법의 어떤 원칙을 반영했는지
+
+수정 제안은 구체적이고 실행 가능해야 합니다.
+"""
+    
+    suggestion = llm.generate(prompt, system_prompt, temperature=0.4, max_tokens=600)
+    
+    if suggestion:
+        return suggestion.strip()
+    else:
+        # LLM 실패 시 기본 제안
+        return get_suggestion(article_id)
+
+
+# =============================================================================
 # 종합 판단 (메인 로직)
 # =============================================================================
 THRESHOLD = 0.6  # 요청대로 0.6
 
-def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
-    article_id = detect_best_article(user_text)
+def comprehensive_judgment(user_text: str, conn: Neo4jConnector, 
+                         use_text2cypher: Optional[bool] = None) -> Dict:
+    """
+    종합 판단 함수
+    
+    Args:
+        user_text: 검사할 약관 조항 텍스트
+        conn: Neo4j 연결 객체
+        use_text2cypher: Text2Cypher 사용 여부 (None이면 설정값 사용)
+        
+    Returns:
+        판단 결과 딕셔너리
+    """
+    # 설정값 사용
+    if use_text2cypher is None:
+        use_text2cypher = settings.USE_TEXT2CYPHER
+    
+    compare_mode = settings.COMPARE_METHODS
+    
+    # 비교 모드: 두 방식 모두 실행
+    if compare_mode:
+        return _comprehensive_judgment_compare(user_text, conn)
+    
+    # 일반 모드: 선택된 방식으로 실행
+    if use_text2cypher:
+        return _comprehensive_judgment_with_text2cypher(user_text, conn)
+    else:
+        return _comprehensive_judgment_standard(user_text, conn)
 
-    # 1) 하드룰 먼저 체크 (명백한 전면 면책 표현)
-    hard_match = detect_hard_violation(user_text)
-    hard_snippet = hard_match.group(0) if hard_match else None
 
-    # 2) DB에서 위반 사례 불러오기
-    cases = query_violation_cases(conn, article_id)
-
-    # 3) 가장 유사한 사례 찾기 (있다면)
+def _judgment_core(user_text: str, cases: List[Dict], article_id: str, 
+                  hard_match: Optional[re.Match], hard_snippet: Optional[str]) -> Dict:
+    """공통 판단 로직 (점수 계산, 판단 등)"""
+    # 가장 유사한 사례 찾기
     best_case = find_most_similar_violation(user_text, cases) if cases else None
 
-    # 4) contrastive
+    # contrastive 점수
     contrastive = calculate_contrastive_score(user_text, best_case) if best_case else 0.5
     unfairness = 1 - contrastive
     base_sim = best_case['similarity'] if best_case else 0.0
 
-    # 5) 기본 final score (embedding 기반)
+    # 기본 final score (embedding 기반)
     final_score = (unfairness * 0.7) + (base_sim * 0.3)
     final_score = float(min(max(final_score, 0.0), 1.0))
 
-    # 6) 규칙 기반 강화
+    # 규칙 기반 강화
     neg_count = detect_negation_count(user_text)
     if neg_count >= 2:
         final_score = min(final_score * 1.2, 1.0)
@@ -261,7 +769,7 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
     if any(re.search(pat, user_text) for pat in ARTICLE_PATTERNS.get("제7조", {}).get("patterns", [])):
         final_score = max(final_score, 0.8)
 
-    # 7) 판단 및 심각도
+    # 판단 및 심각도
     violation = final_score > THRESHOLD
     if final_score > 0.8:
         severity = "높음"
@@ -270,7 +778,7 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
     else:
         severity = "낮음"
 
-    # 8) 근거(근거조문/사례) 구성
+    # 근거 구성
     top_reasons = []
     if best_case:
         top_reasons.append({
@@ -280,7 +788,6 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
             "snippet": (best_case.get('violation_text') or best_case.get('text') or '')[:300],
             "score": float(final_score)
         })
-    # DB 근거가 없지만 하드룰이 잡혔을 때 - 규칙 기반 근거 반환
     if not top_reasons and hard_match:
         top_reasons.append({
             "level": "규칙기반_근거",
@@ -290,9 +797,7 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
             "score": float(final_score),
             "note": "명백한 전면 면책 표현(hard rule)"
         })
-    # 완전히 근거가 없을 때 (DB 없음, 하드룰 없음)에는 규칙 기반 유추 스니펫 제공
     if not top_reasons:
-        # 간단한 추출형 스니펫: 약관 중 부정어 포함 문장 반환
         candidate_snippet = user_text[:300]
         top_reasons.append({
             "level": "추측근거",
@@ -303,28 +808,175 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
             "note": "유사 위반사례가 DB에 없으므로 입력문장에서 추출한 후보"
         })
 
-    # 9) 설명 텍스트
-    if violation:
-        explanation = f"입력문구는 약관법상 불공정한 표현으로 판단됩니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
-    else:
-        explanation = f"현재 DB/규칙 기준으로는 불공정 여부가 명확하지 않습니다. (유사도: {base_sim:.2f}, 불공정도: {final_score:.2f})"
-
-    # 10) 결과 반환
     return {
+        "best_case": best_case,
+        "contrastive": contrastive,
+        "unfairness": unfairness,
+        "base_sim": base_sim,
+        "final_score": final_score,
         "violation": violation,
-        "score": float(final_score),
         "severity": severity,
+        "top_reasons": top_reasons,
+        "neg_count": neg_count,
+        "hard_match": hard_match
+    }
+
+
+def _comprehensive_judgment_standard(user_text: str, conn: Neo4jConnector) -> Dict:
+    """표준 방식: 규칙 기반 조항 판별 + 고정 쿼리"""
+    article_id = detect_best_article(user_text)
+
+    # 하드룰 체크
+    hard_match = detect_hard_violation(user_text)
+    hard_snippet = hard_match.group(0) if hard_match else None
+
+    # DB에서 위반 사례 불러오기 (고정 쿼리)
+    cases = query_violation_cases(conn, article_id)
+    
+    # 법률 조문 조회
+    law_content = query_law_content(conn, article_id)
+
+    # 공통 판단 로직
+    judgment = _judgment_core(user_text, cases, article_id, hard_match, hard_snippet)
+
+    # RAG 컨텍스트 구성
+    rag_context = build_rag_context(
+        user_text, judgment["best_case"], article_id, law_content, conn
+    )
+
+    # LLM 기반 설명 생성
+    explanation = llm_generate_explanation(
+        user_text, rag_context, judgment["violation"],
+        judgment["final_score"], judgment["base_sim"], article_id
+    )
+
+    # LLM 기반 제안 생성
+    correction_example = judgment["best_case"].get('correction_text') if judgment["best_case"] else None
+    suggestion = llm_generate_suggestion(
+        user_text, article_id, rag_context, correction_example
+    )
+
+    return {
+        "violation": judgment["violation"],
+        "score": judgment["final_score"],
+        "severity": judgment["severity"],
         "article_id": article_id,
         "explanation": explanation,
-        "suggestion": get_suggestion(article_id),
-        "top_reasons": top_reasons,
+        "suggestion": suggestion,
+        "top_reasons": judgment["top_reasons"],
+        "method": "standard",
         "debug": {
-            "base_similarity": float(base_sim),
-            "contrastive": float(contrastive),
-            "unfairness": float(unfairness),
-            "negation_count": neg_count,
-            "hard_rule_matched": bool(hard_match),
+            "base_similarity": judgment["base_sim"],
+            "contrastive": judgment["contrastive"],
+            "unfairness": judgment["unfairness"],
+            "negation_count": judgment["neg_count"],
+            "hard_rule_matched": bool(judgment["hard_match"]),
+            "cases_found": len(cases),
         }
+    }
+
+
+def _comprehensive_judgment_with_text2cypher(user_text: str, conn: Neo4jConnector) -> Dict:
+    """Text2Cypher 방식: LLM으로 조항 분석 + 동적 쿼리 생성"""
+    # LLM으로 조항 분석
+    analysis = analyze_clause_with_llm(user_text)
+    if not analysis:
+        # LLM 실패 시 표준 방식으로 폴백
+        return _comprehensive_judgment_standard(user_text, conn)
+    
+    article_id = analysis.get('article_id')
+    if not article_id:
+        article_id = detect_best_article(user_text)  # 폴백
+
+    # 하드룰 체크
+    hard_match = detect_hard_violation(user_text)
+    hard_snippet = hard_match.group(0) if hard_match else None
+
+    # Text2Cypher로 위반 사례 검색
+    cases = query_violation_cases_text2cypher(conn, user_text, article_id)
+    
+    # 법률 조문 조회
+    law_content = query_law_content(conn, article_id)
+
+    # 공통 판단 로직
+    judgment = _judgment_core(user_text, cases, article_id, hard_match, hard_snippet)
+
+    # RAG 컨텍스트 구성
+    rag_context = build_rag_context(
+        user_text, judgment["best_case"], article_id, law_content, conn
+    )
+
+    # LLM 기반 설명 생성
+    explanation = llm_generate_explanation(
+        user_text, rag_context, judgment["violation"],
+        judgment["final_score"], judgment["base_sim"], article_id
+    )
+
+    # LLM 기반 제안 생성
+    correction_example = judgment["best_case"].get('correction_text') if judgment["best_case"] else None
+    suggestion = llm_generate_suggestion(
+        user_text, article_id, rag_context, correction_example
+    )
+
+    return {
+        "violation": judgment["violation"],
+        "score": judgment["final_score"],
+        "severity": judgment["severity"],
+        "article_id": article_id,
+        "explanation": explanation,
+        "suggestion": suggestion,
+        "top_reasons": judgment["top_reasons"],
+        "method": "text2cypher",
+        "analysis": analysis,  # LLM 분석 결과 포함
+        "debug": {
+            "base_similarity": judgment["base_sim"],
+            "contrastive": judgment["contrastive"],
+            "unfairness": judgment["unfairness"],
+            "negation_count": judgment["neg_count"],
+            "hard_rule_matched": bool(judgment["hard_match"]),
+            "cases_found": len(cases),
+            "llm_confidence": analysis.get('confidence'),
+        }
+    }
+
+
+def _comprehensive_judgment_compare(user_text: str, conn: Neo4jConnector) -> Dict:
+    """비교 모드: 두 방식 모두 실행하여 결과 비교"""
+    # 두 방식 모두 실행
+    result_standard = _comprehensive_judgment_standard(user_text, conn)
+    result_text2cypher = _comprehensive_judgment_with_text2cypher(user_text, conn)
+
+    return {
+        "violation": result_standard["violation"],  # 표준 방식 결과를 메인으로
+        "score": result_standard["score"],
+        "severity": result_standard["severity"],
+        "article_id": result_standard["article_id"],
+        "explanation": result_standard["explanation"],
+        "suggestion": result_standard["suggestion"],
+        "top_reasons": result_standard["top_reasons"],
+        "method": "compare",
+        "comparison": {
+            "standard": {
+                "violation": result_standard["violation"],
+                "score": result_standard["score"],
+                "explanation": result_standard["explanation"],
+                "cases_found": result_standard["debug"].get("cases_found", 0),
+            },
+            "text2cypher": {
+                "violation": result_text2cypher["violation"],
+                "score": result_text2cypher["score"],
+                "explanation": result_text2cypher["explanation"],
+                "cases_found": result_text2cypher["debug"].get("cases_found", 0),
+                "llm_confidence": result_text2cypher.get("analysis", {}).get("confidence"),
+            },
+            "differences": {
+                "score_diff": abs(result_standard["score"] - result_text2cypher["score"]),
+                "violation_match": result_standard["violation"] == result_text2cypher["violation"],
+                "cases_diff": abs(result_standard["debug"].get("cases_found", 0) - 
+                                 result_text2cypher["debug"].get("cases_found", 0)),
+            }
+        },
+        "debug": result_standard["debug"]
     }
 
 # =============================================================================
