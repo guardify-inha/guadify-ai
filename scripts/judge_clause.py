@@ -177,19 +177,24 @@ def query_candidates(conn: Neo4jConnector, user_text: str) -> Dict[str, List[Dic
     LIMIT 200
     """
 
-    # 호 후보 (항/조 연결 정보 포함)
+    # 호 후보 (조-항-호 구조 + 조-호 직접 연결 구조 모두 포함)
     q_hos = f"""
-    MATCH (a:조)-[:HAS_HANG]->(h:항)-[:HAS_HO]->(o:호)
+    MATCH (o:호)
     WHERE {ho_where}
-    RETURN a.id AS article_id, h.id AS hang_id, h.hang_num AS hang_num,
+    OPTIONAL MATCH (o)<-[:HAS_HO]-(h:항)<-[:HAS_HANG]-(a_from_hang:조)
+    OPTIONAL MATCH (o)<-[:HAS_HO]-(a_direct:조)
+    RETURN COALESCE(a_from_hang.id, a_direct.id) AS article_id,
+           h.id AS hang_id, h.hang_num AS hang_num,
            o.id AS id, o.ho_num AS ho_num, o.content AS content
     LIMIT 300
     """
 
+    result_hos = conn.execute_query(q_hos)
+    
     return {
         "articles": conn.execute_query(q_articles),
         "hangs": conn.execute_query(q_hangs),
-        "hos": conn.execute_query(q_hos),
+        "hos": result_hos if result_hos else [],
     }
 
 
@@ -278,9 +283,14 @@ def rank_results(user_text: str, cands: Dict[str, List[Dict]]) -> Dict[str, List
 # ----------------------------
 
 def decide_and_explain(user_text: str, ranked: Dict[str, List[Tuple[float, Dict]]]) -> Dict:
-    top_article = ranked.get("articles", [ (0.0,{}) ])[0]
-    top_hang = ranked.get("hangs", [ (0.0,{}) ])[0]
-    top_ho = ranked.get("hos", [ (0.0,{}) ])[0]
+    # 빈 리스트 체크 후 기본값 제공
+    articles_list = ranked.get("articles", [])
+    hangs_list = ranked.get("hangs", [])
+    hos_list = ranked.get("hos", [])
+    
+    top_article = (articles_list[0] if articles_list else (0.0, {}))
+    top_hang = (hangs_list[0] if hangs_list else (0.0, {}))
+    top_ho = (hos_list[0] if hos_list else (0.0, {}))
 
     # 규칙 기반 점수 최대값 (호>항>조)
     final_score = max(top_ho[0], top_hang[0] * 0.9, top_article[0] * 0.8)
@@ -322,7 +332,7 @@ def decide_and_explain(user_text: str, ranked: Dict[str, List[Tuple[float, Dict]
     explanation = "규칙 기반 매칭 결과, 입력 문장이 특정 조항(조/항/호)의 금지 유형과 일치합니다."
     suggestion = "조문 취지에 맞게 제한 사유를 합리적으로 한정하고, 전면적 배제 표현은 삭제하세요."
 
-    if reasons:
+    if reasons and len(reasons) > 0:
         top = reasons[0]
         aid = top.get("article_id") or top.get("id")
         if aid and "제7조" in aid:
