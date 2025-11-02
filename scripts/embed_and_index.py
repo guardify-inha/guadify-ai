@@ -1,120 +1,159 @@
 """
-VectorRAG 임베딩 생성 (메모리 최적화 버전)
-- 모델: jhgan/ko-sroberta-multitask (가볍고 빠름!)
-- 배치 크기 자동 조절
-- 메모리 부족 시 자동 재시도
-
-Inputs:  ../outputs/chunks.jsonl
-Outputs: ../outputs/embeddings.npy
-         ../outputs/faiss.index
-         ../outputs/faiss_meta.pkl
+불공정 조항 및 수정본에 임베딩 벡터 추가
 """
+import sys
+from pathlib import Path
 
-import json
-import os
-import pickle
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import faiss
-from tqdm import tqdm
-import gc
+PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-# 경로 설정
-CHUNKS_FILE = os.path.join("..", "outputs", "chunks.jsonl")
+try:
+    from dotenv import load_dotenv, find_dotenv
+    load_dotenv(find_dotenv())
+except Exception:
+    pass
 
-# 가벼운 한국어 모델 (768차원, 빠름!)
-EMBED_MODEL = "jhgan/ko-sroberta-multitask"
+from database.neo4j_connector import Neo4jConnector
 
-OUTPUT_DIR = os.path.join("..", "outputs")
-EMB_FILE = os.path.join(OUTPUT_DIR, "embeddings.npy")
-INDEX_FILE = os.path.join(OUTPUT_DIR, "faiss.index")
-META_FILE = os.path.join(OUTPUT_DIR, "faiss_meta.pkl")
+try:
+    from sentence_transformers import SentenceTransformer
+    MODEL = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    print("✓ 임베딩 모델 로드 완료")
+except Exception as e:
+    print(f"✗ 임베딩 모델 로드 실패: {e}")
+    sys.exit(1)
 
 
-def encode_with_memory_management(model, texts, initial_batch_size=32):
-    """
-    메모리 부족 시 배치 크기를 줄여가며 재시도
-    """
-    batch_size = initial_batch_size
+def add_embeddings_to_violations(conn: Neo4jConnector):
+    """불공정 조항 원문에 임베딩 추가"""
+    print("\n📊 불공정 조항 임베딩 생성 중...")
     
-    while batch_size >= 1:
-        try:
-            print(f"배치 크기 {batch_size}로 임베딩 생성 중...")
-            embeddings = model.encode(
-                texts,
-                show_progress_bar=True,
-                batch_size=batch_size,
-                normalize_embeddings=True,
-                convert_to_numpy=True,
-                device='cpu'
-            )
-            return embeddings
+    # 모든 불공정 조항 조회
+    query = """
+    MATCH (v:불공정조항원문)
+    WHERE v.text IS NOT NULL
+    RETURN v.id as id, v.text as text
+    """
+    
+    violations = conn.execute_query(query)
+    
+    if not violations:
+        print("  ⚠️  불공정 조항이 없습니다.")
+        return
+    
+    print(f"  → {len(violations)}개 조항 처리 중...")
+    
+    for idx, v in enumerate(violations, 1):
+        # 임베딩 생성
+        embedding = MODEL.encode(v['text'])
+        embedding_list = embedding.tolist()
         
-        except RuntimeError as e:
-            if "out of memory" in str(e) or "not enough memory" in str(e):
-                batch_size = batch_size // 2
-                print(f"⚠️ 메모리 부족! 배치 크기를 {batch_size}로 줄입니다...")
-                gc.collect()  # 가비지 컬렉션
-                
-                if batch_size < 1:
-                    raise RuntimeError("배치 크기 1로도 메모리 부족. 모델을 더 작은 것으로 변경하세요.")
-            else:
-                raise e
+        # Neo4j에 저장
+        update_query = """
+        MATCH (v:불공정조항원문 {id: $id})
+        SET v.embedding = $embedding
+        """
+        conn.execute_query(update_query, {
+            "id": v['id'],
+            "embedding": embedding_list
+        })
+        
+        if idx % 10 == 0:
+            print(f"  ... {idx}/{len(violations)} 완료")
+    
+    print(f"  ✓ {len(violations)}개 불공정 조항 임베딩 완료")
+
+
+def add_embeddings_to_corrections(conn: Neo4jConnector):
+    """수정 후 약관에 임베딩 추가"""
+    print("\n📊 수정 후 약관 임베딩 생성 중...")
+    
+    # 모든 수정본 조회
+    query = """
+    MATCH (c:수정후약관)
+    WHERE c.text IS NOT NULL
+    RETURN c.id as id, c.text as text
+    """
+    
+    corrections = conn.execute_query(query)
+    
+    if not corrections:
+        print("  ⚠️  수정 후 약관이 없습니다.")
+        return
+    
+    print(f"  → {len(corrections)}개 수정본 처리 중...")
+    
+    for idx, c in enumerate(corrections, 1):
+        # 임베딩 생성
+        embedding = MODEL.encode(c['text'])
+        embedding_list = embedding.tolist()
+        
+        # Neo4j에 저장
+        update_query = """
+        MATCH (c:수정후약관 {id: $id})
+        SET c.embedding = $embedding
+        """
+        conn.execute_query(update_query, {
+            "id": c['id'],
+            "embedding": embedding_list
+        })
+        
+        if idx % 10 == 0:
+            print(f"  ... {idx}/{len(corrections)} 완료")
+    
+    print(f"  ✓ {len(corrections)}개 수정본 임베딩 완료")
+
+
+def verify_embeddings(conn: Neo4jConnector):
+    """임베딩 추가 확인"""
+    print("\n🔍 임베딩 검증 중...")
+    
+    query_violations = """
+    MATCH (v:불공정조항원문)
+    WHERE v.embedding IS NOT NULL
+    RETURN count(v) as count
+    """
+    
+    query_corrections = """
+    MATCH (c:수정후약관)
+    WHERE c.embedding IS NOT NULL
+    RETURN count(c) as count
+    """
+    
+    violation_count = conn.execute_query(query_violations)[0]['count']
+    correction_count = conn.execute_query(query_corrections)[0]['count']
+    
+    print(f"  • 불공정 조항 (임베딩 있음): {violation_count}개")
+    print(f"  • 수정 후 약관 (임베딩 있음): {correction_count}개")
 
 
 def main():
-    print(f"임베딩 모델 로드: {EMBED_MODEL}")
-    model = SentenceTransformer(EMBED_MODEL)
+    """메인 실행 함수"""
+    print("=" * 60)
+    print("불공정 조항 임베딩 생성 스크립트")
+    print("=" * 60)
     
-    # 청크 로드
-    texts = []
-    metadata = []
+    conn = Neo4jConnector()
     
-    print(f"청크 파일 로드: {CHUNKS_FILE}")
-    with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
-        for line in tqdm(f, desc="청크 로드 중"):
-            obj = json.loads(line)
-            text = obj.get("text", "").strip()
-            if not text:
-                continue
-            
-            texts.append(text)
-            metadata.append({
-                "chunk_id": obj.get("chunk_id"),
-                "source_file": obj.get("source_file"),
-                "source_tag": obj.get("source_tag"),
-                "level": obj.get("level"),
-                "text": text,
-                "metadata": obj.get("metadata", {})
-            })
-    
-    print(f"총 {len(texts)}개 청크 로드 완료")
-    
-    # 임베딩 생성 (메모리 관리)
-    embeddings = encode_with_memory_management(model, texts, initial_batch_size=32)
-    embeddings = np.array(embeddings).astype("float32")
-    
-    print(f"임베딩 생성 완료: {embeddings.shape}")
-    
-    # 임베딩 저장
-    np.save(EMB_FILE, embeddings)
-    print(f"✅ 임베딩 저장: {EMB_FILE}")
-    
-    # FAISS 인덱스 생성
-    d = embeddings.shape[1]
-    faiss.normalize_L2(embeddings)
-    index = faiss.IndexFlatIP(d)
-    index.add(embeddings)
-    
-    faiss.write_index(index, INDEX_FILE)
-    print(f"✅ FAISS 인덱스 저장: {INDEX_FILE}")
-    
-    # 메타데이터 저장
-    with open(META_FILE, "wb") as f:
-        pickle.dump(metadata, f)
-    print(f"✅ 메타데이터 저장: {META_FILE}")
-    
-    print(f"\n🎉 완료! 총 {len(embeddings)}개 임베딩 생성")
+    try:
+        # 1. 불공정 조항 임베딩
+        add_embeddings_to_violations(conn)
+        
+        # 2. 수정본 임베딩
+        add_embeddings_to_corrections(conn)
+        
+        # 3. 검증
+        verify_embeddings(conn)
+        
+        print("\n✅ 모든 임베딩 생성 완료!")
+        
+    except Exception as e:
+        print(f"\n✗ 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

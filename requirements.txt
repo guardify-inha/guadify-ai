@@ -11,3 +11,4 @@ pdfplumber
 transformers
 huggingface_hub
 streamlit
+pandas
