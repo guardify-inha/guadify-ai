@@ -96,14 +96,135 @@ def lexical_jaccard(s1: str, s2: str) -> float:
 # 조항 판별
 # =============================================================================
 def detect_best_article(text: str) -> str:
+    """
+    위반 조항 판단 (완전히 개선된 로직)
+    - 핵심 키워드 우선 매칭 (조항별 구분력 높은 키워드)
+    - 패턴 기반 보조 판단
+    - 점수 계산 로직 개선
+    """
+    # 핵심 키워드 정의 (조항별 구분력 높은 키워드 - 정규식 포함)
+    CORE_KEYWORDS = {
+        "제7조": [
+            r"피해배상.*않", r"손해배상.*않", r"배상.*않", r"책임을 지지 않", 
+            r"책임없음", r"책임 없음", r"면책", r"책임.*배제", r"책임.*면제",
+            r"어떠한.*책임", r"모든 책임.*없", r"책임.*부담하지",
+            "책임을 지지 않습니다", "책임없다", "책임이 없다",
+        ],
+        "제8조": [
+            r"과중한.*손해배상", r"과도한.*손해배상", r"지연.*손해금", 
+            r"위약금", r"과중한.*지연", r"과도한.*배상", r"과도한.*손해",
+            r"손해배상액", r"지연.*배상", r"지연.*손해",
+        ],
+        "제9조": [
+            r"자동.*연장", r"자동으로.*연장", r"묵시.*연장", r"갱신.*밝히지",
+            r"해지.*요청.*않", r"종료.*의사.*밝히지", r"계약.*자동",
+            r"해제권", r"해지권", r"원상회복.*고객",
+        ],
+        "제10조": [
+            r"급부.*변경", r"급부를.*변경", r"일방적.*변경", r"사업자.*변경",
+            r"급부.*중지", r"급부.*대행", r"사정에.*따라.*변경",
+        ],
+        "제11조": [
+            r"항변권", r"상계권", r"기한.*이익", r"제3자.*거래.*제한",
+            r"제3자와.*계약.*금지", r"비밀.*누설",
+        ],
+        "제12조": [
+            r"묵시.*동의", r"동의.*간주", r"의사표시.*간주", r"의사표시.*의제",
+            r"묵시적", r"고지.*않.*동의", r"통지.*않.*동의",
+        ],
+        "제13조": [
+            r"대리인.*책임", r"대리인에게.*책임", r"대리인이.*책임", r"대리인의.*책임",
+        ],
+        "제14조": [
+            r"소송.*제기.*금지", r"소송.*제기.*않", r"재판관할", r"입증책임.*고객",
+        ]
+    }
+    
     scores = {}
+    
     for article_id, info in ARTICLE_PATTERNS.items():
         score = 0.0
-        score += sum(1 for kw in info['keywords'] if kw in text) * 0.1
-        score += sum(1 for pat in info['patterns'] if re.search(pat, text)) * 0.3
-        scores[article_id] = min(score, 1.0)
+        
+        # 1. 핵심 키워드 매칭 (최우선, 매우 높은 점수)
+        core_keywords = CORE_KEYWORDS.get(article_id, [])
+        core_matched_count = 0
+        for pattern in core_keywords:
+            try:
+                if re.search(pattern, text, re.IGNORECASE):
+                    # 핵심 키워드 매칭: 매우 높은 점수 (각 1.0점)
+                    core_matched_count += 1
+                    score += 1.0
+            except re.error:
+                continue
+        
+        # 핵심 키워드 점수 (최대 3.0점 - 여러 개 매칭 가능)
+        if core_matched_count > 0:
+            score = min(core_matched_count * 1.0, 3.0)
+        
+        # 2. 일반 키워드 매칭 (핵심 키워드가 없을 때만 보조)
+        if core_matched_count == 0:
+            keywords_matched = []
+            for kw in info.get('keywords', []):
+                if kw in text:
+                    # 키워드 길이에 따라 가중치
+                    if len(kw) >= 15:
+                        weight = 0.25
+                    elif len(kw) >= 10:
+                        weight = 0.15
+                    elif len(kw) >= 6:
+                        weight = 0.1
+                    else:
+                        weight = 0.05  # 짧은 키워드는 매우 낮음
+                    keywords_matched.append((kw, weight))
+            
+            # 일반 키워드 점수 (최대 1.0점)
+            keyword_score = min(sum(w for _, w in keywords_matched), 1.0)
+            score += keyword_score
+        
+        # 3. 패턴 매칭 (보조)
+        patterns_matched = []
+        for pat in info.get('patterns', []):
+            try:
+                if re.search(pat, text):
+                    patterns_matched.append(pat)
+            except re.error:
+                continue
+        # 패턴 점수: 핵심 키워드가 있으면 보조(0.2점), 없으면 더 높게(0.4점)
+        pattern_weight = 0.2 if core_matched_count > 0 else 0.4
+        pattern_score = min(len(patterns_matched) * pattern_weight, 1.0)
+        score += pattern_score
+        
+        # 최종 점수 저장
+        scores[article_id] = score
+    
+    # 최고 점수 조항 선택
+    if not scores:
+        return "제6조"
+    
     best = max(scores.items(), key=lambda x: x[1])
-    return best[0] if best[1] >= 0.2 else "제7조"
+    
+    # 핵심 키워드가 매칭된 경우는 바로 반환
+    core_keywords_all = CORE_KEYWORDS.get(best[0], [])
+    has_core_match = False
+    for pattern in core_keywords_all:
+        try:
+            if re.search(pattern, text, re.IGNORECASE):
+                has_core_match = True
+                break
+        except:
+            continue
+    
+    if has_core_match and best[1] >= 0.5:
+        return best[0]
+    
+    # 점수가 너무 낮으면 (0.3 미만) 기본값 반환
+    if best[1] < 0.3:
+        top3 = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        if top3[0][1] > 0.15:
+            return top3[0][0]
+        return "제6조"
+    
+    return best[0]
 
 # =============================================================================
 # Neo4j 조회
@@ -861,6 +982,7 @@ def _comprehensive_judgment_standard(user_text: str, conn: Neo4jConnector) -> Di
         "score": judgment["final_score"],
         "severity": judgment["severity"],
         "article_id": article_id,
+        "law_content": law_content,  # 조, 항, 호 정보 추가
         "explanation": explanation,
         "suggestion": suggestion,
         "top_reasons": judgment["top_reasons"],
@@ -923,6 +1045,7 @@ def _comprehensive_judgment_with_text2cypher(user_text: str, conn: Neo4jConnecto
         "score": judgment["final_score"],
         "severity": judgment["severity"],
         "article_id": article_id,
+        "law_content": law_content,  # 조, 항, 호 정보 추가
         "explanation": explanation,
         "suggestion": suggestion,
         "top_reasons": judgment["top_reasons"],
@@ -951,6 +1074,7 @@ def _comprehensive_judgment_compare(user_text: str, conn: Neo4jConnector) -> Dic
         "score": result_standard["score"],
         "severity": result_standard["severity"],
         "article_id": result_standard["article_id"],
+        "law_content": result_standard.get("law_content"),  # 조, 항, 호 정보 추가
         "explanation": result_standard["explanation"],
         "suggestion": result_standard["suggestion"],
         "top_reasons": result_standard["top_reasons"],

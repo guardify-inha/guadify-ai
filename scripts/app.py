@@ -55,7 +55,40 @@ if run_btn:
         st.subheader("판단 결과")
         st.metric(label="위반 여부", value=status)
         st.write(f"신뢰 점수: **{score:.2f}**")
-        st.write(f"조항: **{result.get('article_id', 'N/A')}**")
+        
+        # 조항 정보 표시
+        article_id = result.get('article_id', 'N/A')
+        st.markdown(f"<p>조항: <strong>{article_id}</strong></p>", unsafe_allow_html=True)
+        
+        # 약관법 원문 조, 항, 호 정보 표시 (조항 정보 바로 아래)
+        law_content = result.get('law_content')
+        if law_content:
+            # 조 제목
+            if law_content.get('title'):
+                st.markdown(f"<div style='margin-top: 8px;'><strong>{law_content.get('title', '')}</strong></div>", unsafe_allow_html=True)
+            
+            # 조 내용
+            if law_content.get('content'):
+                st.markdown(f"<div style='margin-top: 6px; margin-bottom: 10px; padding: 10px; background-color: #f0f2f6; border-radius: 6px; line-height: 1.6;'><p style='margin: 0; color: #333;'>{law_content.get('content', '')}</p></div>", unsafe_allow_html=True)
+            
+            # 항 정보
+            hangs = law_content.get('hangs', [])
+            if hangs:
+                for hang in hangs:
+                    hang_num = hang.get('num', '')
+                    hang_content = hang.get('content', '')
+                    if hang_num and hang_content:
+                        st.markdown(f"<div style='margin-left: 16px; margin-top: 6px; margin-bottom: 6px; padding: 8px; background-color: #f8f9fa; border-left: 4px solid #4285f4; border-radius: 4px;'><p style='margin: 0; font-size: 0.92em; line-height: 1.5; color: #1a73e8;'><strong>{hang_num}:</strong> <span style='color: #333;'>{hang_content}</span></p></div>", unsafe_allow_html=True)
+            
+            # 호 정보
+            hos = law_content.get('hos', [])
+            if hos:
+                for ho in hos:
+                    ho_num = ho.get('num', '')
+                    ho_content = ho.get('content', '')
+                    if ho_num and ho_content:
+                        st.markdown(f"<div style='margin-left: 24px; margin-top: 6px; margin-bottom: 6px; padding: 8px; background-color: #fafafa; border-left: 4px solid #34a853; border-radius: 4px;'><p style='margin: 0; font-size: 0.88em; line-height: 1.5; color: #137333;'><strong>{ho_num}:</strong> <span style='color: #333;'>{ho_content}</span></p></div>", unsafe_allow_html=True)
+        
         st.write(f"심각도: **{result.get('severity', 'N/A')}**")
 
     with col2:
