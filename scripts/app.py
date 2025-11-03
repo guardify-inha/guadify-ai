@@ -14,7 +14,13 @@ try:
 except Exception:
     pass
 
-from scripts.judge_clause import run as judge_run
+# judge_clause.py (버전 없음) 임포트
+try:
+    from scripts.judge_clause import run as judge_run
+except ImportError:
+    st.error("scripts/judge_clause.py 파일을 찾을 수 없습니다.")
+    st.stop()
+
 
 st.set_page_config(page_title="약관법 위반 판단", page_icon="⚖️", layout="wide")
 
@@ -43,9 +49,13 @@ if run_btn:
 
     violation = result.get("violation")
     score = result.get("score")
-    reasons = result.get("top_reasons", [])
     explanation = result.get("explanation")
     suggestion = result.get("suggestion")
+    
+    # --- (버그 수정) ---
+    # 'top_reasons'가 아니라 'best_match_case'를 읽어옵니다.
+    best_case = result.get("best_match_case")
+    # --- (수정 끝) ---
 
     # Summary card
     status = "위반" if violation else "비위반/불명확"
@@ -65,19 +75,33 @@ if run_btn:
     st.markdown("---")
     st.subheader("근거 조문/사례")
 
-    if not reasons:
-        st.info("근거 후보가 없습니다. 입력 문장을 다시 시도하세요.")
+    # --- (버그 수정) ---
+    # 'reasons'가 아니라 'best_case'가 비어있는지(None) 확인합니다.
+    if not best_case:
+        st.info("근거 후보가 없습니다. (유사 사례를 찾지 못했거나 점수 로직에 의해 무시됨)")
     else:
-        for i, r in enumerate(reasons[:5], start=1):
-            level = r.get("level", "")
-            rid = r.get("id", "")
-            article_id = r.get("article_id", "")
-            snippet = (r.get("snippet") or "").strip()
-            sc = r.get("score", 0)
+        # 루프를 제거하고 'best_case' 1건만 표시합니다.
+        # (v6 이후 버전 호환을 위해 'similarity_violation' 또는 'similarity' 확인)
+        if 'similarity_violation' in best_case:
+            similarity = best_case.get("similarity_violation", 0.0)
+        else:
+            similarity = best_case.get("similarity", 0.0)
+            
+        violation_text = best_case.get("violation_text", "N/A")
+        reason = best_case.get("reason", "N/A")
+        correction_text = best_case.get("correction_text") # v6인 경우
 
-            header = f"{i}. [{level}] {article_id} - {rid} (유사도: {sc:.2f})".strip()
-            with st.expander(header, expanded=(i == 1)):
-                st.write(snippet)
+        header = f"가장 유사한 사례 (유사도: {similarity:.2f})"
+        with st.expander(header, expanded=True):
+            st.markdown("##### 1. 불공정 원문 (DB)")
+            st.info(violation_text)
+            st.markdown("##### 2. 시정 요청 사유 (DB)")
+            st.warning(reason)
+            # v6 로직의 수정본 텍스트가 있다면 함께 표시
+            if correction_text:
+                st.markdown("##### 3. 공정 수정본 (DB)")
+                st.success(correction_text)
+    # --- (수정 끝) ---
 
     st.markdown("---")
     st.subheader("수정 제안")

@@ -1,16 +1,11 @@
 """
-약관 불공정성 판단 - GraphRAG 기반 (v6 - 위반/수정 비교 로직)
+약관 불공정성 판단 - GraphRAG 기반 (v7 - 점수 로직 수정)
 - 핵심 변경:
-  1) (v6) find_top_similar_cases:
-     - 'similarity_violation' (위반사례 유사도) 계산
-     - 'similarity_correction' (수정본 유사도) 계산
-     - -> 두 개의 점수를 모두 반환
-  2) (v6) calculate_deterministic_score:
-     - (similarity_violation - similarity_correction)을 'net_similarity'로 계산
-     - 이 net_similarity 점수를 최종 점수 후보(max)에 반영
-     - -> "수정본과 비슷하면 공정하다"는 핵심 로직 구현
-  3) (v5) 'critical'/'high' 키워드 발견 시 점수 'floor' 보장 (기존 로직 유지)
-  4) (v4) best_match_case에 'correction_text' 추가
+  1) (v7) calculate_deterministic_score 버그 수정:
+     - 'article_score'가 'WEIGHTS['article_match'](0.1)'로 곱해져 무시되던 치명적 버그 수정.
+     - 이제 article_score (0.3)가 최종 점수 후보에 직접 반영됨.
+  2) (v7) 'medium' 키워드 점수 하한선(0.4) 추가 (v5 로직 부활)
+  3) (v6) '위반/수정 비교 로직' (net_similarity)은 그대로 유지.
 """
 import re
 import sys
@@ -199,7 +194,6 @@ def check_combined_patterns(text: str) -> List[Dict]:
 
 # =============================================================================
 # Neo4j에서 위반 사례 검색 (변경 없음)
-# (이미 correction_embedding을 잘 가져오고 있었음)
 # =============================================================================
 def query_violation_cases(conn: Neo4jConnector, article_id: str, limit: int = 10) -> List[Dict]:
     """조항별 위반 사례 검색 (위험도, 수정본 포함)"""
@@ -227,12 +221,11 @@ def query_violation_cases(conn: Neo4jConnector, article_id: str, limit: int = 10
     return conn.execute_query(query, {"article_id": article_id, "limit": limit})
 
 # =============================================================================
-# (수정) 유사도 기반 상위 N개 사례 검색 (v6 - 수정본 유사도 계산 추가)
+# 유사도 기반 상위 N개 사례 검색 (v6 - 수정본 유사도 계산)
 # =============================================================================
 def find_top_similar_cases(user_text: str, cases: List[Dict], top_k: int = 5) -> List[Dict]:
     """
-    (v6 수정) 유사도 기반 상위 K개 사례 반환
-    - 위반사례(violation)와 수정본(correction) 유사도를 둘 다 계산
+    (v6) 위반사례(violation)와 수정본(correction) 유사도를 둘 다 계산
     """
     if not cases or MODEL is None:
         return []
@@ -241,7 +234,7 @@ def find_top_similar_cases(user_text: str, cases: List[Dict], top_k: int = 5) ->
     scored_cases = []
     
     for case in cases:
-        # --- 1. 위반사례(Violation) 유사도 (기존 로직) ---
+        # --- 1. 위반사례(Violation) 유사도 ---
         viol_emb = case.get('violation_embedding')
         if viol_emb:
             viol_emb = np.array(viol_emb)
@@ -252,12 +245,11 @@ def find_top_similar_cases(user_text: str, cases: List[Dict], top_k: int = 5) ->
         sim_viol_lexical = lexical_jaccard(user_text, case.get('violation_text', ''))
         final_sim_violation = (sim_viol_semantic * 0.7) + (sim_viol_lexical * 0.3)
 
-        # --- 2. 수정본(Correction) 유사도 (v6 신규 로직) ---
+        # --- 2. 수정본(Correction) 유사도 ---
         final_sim_correction = 0.0
         corr_emb = case.get('correction_embedding')
         corr_text = case.get('correction_text', '')
         
-        # 수정본 텍스트와 임베딩이 모두 존재할 경우에만 계산
         if corr_emb and corr_text:
             try:
                 sim_corr_semantic = cosine_similarity(user_emb, np.array(corr_emb))
@@ -273,13 +265,12 @@ def find_top_similar_cases(user_text: str, cases: List[Dict], top_k: int = 5) ->
         case_copy['similarity_correction'] = float(final_sim_correction)
         scored_cases.append(case_copy)
     
-    # 정렬 기준: 여전히 '위반사례'와 가장 유사한 것을 찾는 것이므로, 'similarity_violation'을 기준으로 정렬
     scored_cases.sort(key=lambda x: x['similarity_violation'], reverse=True)
     
     return scored_cases[:top_k]
 
 # =============================================================================
-# RAG 컨텍스트 구성 (변경 없음)
+# RAG 컨텍스트 구성 (v6 - 유사도 2개 표시)
 # =============================================================================
 def build_rag_context(user_text: str, article_id: str, top_cases: List[Dict], 
                       universal_risks: List[Dict], combined_risks: List[Dict]) -> str:
@@ -296,7 +287,6 @@ def build_rag_context(user_text: str, article_id: str, top_cases: List[Dict],
             risk_emoji = {'critical': '⚫', 'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(
                 case.get('risk_level', 'medium'), '⚪'
             )
-            # (v6) 표시할 유사도는 'violation' 유사도
             sim_v = case.get('similarity_violation', 0.0)
             sim_c = case.get('similarity_correction', 0.0)
             context_parts.append(f"### 사례 {i} (위반 유사도: {sim_v:.3f} / 수정 유사도: {sim_c:.3f})")
@@ -329,18 +319,18 @@ def build_rag_context(user_text: str, article_id: str, top_cases: List[Dict],
     return "\n".join(context_parts)
 
 # =============================================================================
-# (수정) 결정론적 점수 계산 로직 (v6 - net_similarity 반영)
+# (수정) 결정론적 점수 계산 로직 (v7 - article_score 버그 수정)
 # =============================================================================
 def calculate_deterministic_score(article_score: float, universal_risks: List[Dict], 
                                   combined_risks: List[Dict], top_cases: List[Dict]) -> Dict:
     """
-    (v6 수정) LLM 없이, 수집된 데이터를 기반으로 불공정 점수를 결정합니다.
-    - 'net_similarity' (위반유사도 - 수정유사도)를 점수 후보로 추가합니다.
-    - v5의 '최대값' 로직을 유지하여, 치명적인 근거 하나만으로도 높은 점수를 보장합니다.
+    (v7 수정) 
+    - (버그 수정) 'article_score'가 0.1로 축소되어 무시되던 치명적인 버그를 수정.
+    - (로직 강화) 'medium' 등급 키워드 발견 시 최소 0.4점 보장.
     """
     
     WEIGHTS = {
-        'article_match': 0.1,
+        # (v7) 'article_match' 삭제. article_score는 그 자체로 점수 후보가 됨.
         'universal_risk': {'critical': 0.5, 'high': 0.3, 'medium': 0.15, 'low': 0.05},
         'combined_pattern': 0.7, 
         'top_case_similarity': 0.5 # net_similarity에 적용될 가중치
@@ -349,61 +339,65 @@ def calculate_deterministic_score(article_score: float, universal_risks: List[Di
     score_candidates = [0.0] # 기본 점수 0.0
     reasoning = [] 
 
-    # 1. 조항 매칭 점수 (v5와 동일)
-    score_candidates.append(article_score * WEIGHTS['article_match'])
-    reasoning.append(f"조항 매칭 점수 기여: {article_score * WEIGHTS['article_match']:.2f}")
+    # --- (v7 버그 수정) ---
+    # 1. 조항 매칭 점수 (detect_best_article에서 탐지한 키워드 위험도)
+    # (기존) score_candidates.append(article_score * WEIGHTS['article_match']) (X)
+    # (수정) article_score 자체를 점수 후보로 추가
+    score_candidates.append(article_score) 
+    reasoning.append(f"조항 키워드 매칭 점수 기여: {article_score:.2f}")
+    # --- (수정 끝) ---
 
-    # 2. 범용 위험 키워드 점수 (v5와 동일)
+    # 2. 범용 위험 키워드 점수 (v5/v6 로직 유지)
     if universal_risks:
         universal_score_sum = sum(WEIGHTS['universal_risk'].get(r.get('risk_level', 'low'), 0.0) for r in universal_risks)
         score_candidates.append(universal_score_sum)
         reasoning.append(f"범용 위험 키워드 합산 기여: {universal_score_sum:.2f}")
+        
         if any(r['risk_level'] == 'critical' for r in universal_risks):
             score_candidates.append(0.8) # 'critical' 키워드 발견 시, 최소 0.8점 보장
             reasoning.append("!! 'critical' 키워드 발견 -> 최소 0.8점 보장")
         elif any(r['risk_level'] == 'high' for r in universal_risks):
             score_candidates.append(0.6) # 'high' 키워드 발견 시, 최소 0.6점 보장
             reasoning.append("!! 'high' 키워드 발견 -> 최소 0.6점 보장")
+        # --- (v7 로직 추가) ---
+        elif any(r['risk_level'] == 'medium' for r in universal_risks):
+            score_candidates.append(0.4) # 'medium' 키워드 발견 시, 최소 0.4점 보장
+            reasoning.append("!! 'medium' 키워드 발견 -> 최소 0.4점 보장")
+        # --- (추가 끝) ---
 
-    # 3. 복합 패턴 점수 (v5와 동일)
+    # 3. 복합 패턴 점수 (v5/v6 로직 유지)
     if combined_risks:
         combined_score = len(combined_risks) * WEIGHTS['combined_pattern']
         score_candidates.append(combined_score)
         score_candidates.append(0.8) # 복합 패턴 발견 시, 최소 0.8점 보장
         reasoning.append(f"복합 패턴 {len(combined_risks)}개 발견 기여: {combined_score:.2f}")
         reasoning.append("!! '복합 패턴' 발견 -> 최소 0.8점 보장")
-        
-    # --- 4. (v6 수정) '위반 vs 수정' 유사도 점수 ---
+         
+    # 4. '위반 vs 수정' 유사도 점수 (v6 로직 유지)
     if top_cases:
-        # 두 개의 유사도를 가져옴
         top_violation_sim = top_cases[0].get('similarity_violation', 0.0)
         top_correction_sim = top_cases[0].get('similarity_correction', 0.0)
 
         # (핵심 로직) 위반 유사도에서 수정본 유사도를 뺀 '순수 불공정 유사도'
-        # (수정본과 더 비슷하면 이 값은 음수가 됨)
         net_similarity = top_violation_sim - top_correction_sim
         
-        # 가중치 적용
         similarity_score = net_similarity * WEIGHTS['top_case_similarity']
 
-        # 기존의 '높은 위반 유사도' 보너스는 유지 (불공정한게 확실하므로)
         if top_violation_sim >= 0.9:
             similarity_score += 0.2
         elif top_violation_sim >= 0.8:
             similarity_score += 0.1
         
-        # (중요) 점수 후보에는 0보다 클 때만 추가
-        # (수정본과 비슷해서 음수가 나온 경우, 다른 점수를 깎아먹지 않도록)
         score_candidates.append(max(0, similarity_score)) 
         
         reasoning.append(f"유사도 점수 (위반 {top_violation_sim:.2f} vs 수정 {top_correction_sim:.2f}) -> Net: {net_similarity:.2f}")
         reasoning.append(f"최종 유사도 기여: {max(0, similarity_score):.2f}")
     
-    # 5. (v5) 모든 점수 후보 중 '최대값'을 최종 점수로 선택
+    # 5. 모든 점수 후보 중 '최대값'을 최종 점수로 선택
     final_score = max(score_candidates)
     final_score = min(final_score, 1.0) # 1.0을 넘지 않도록
     
-    # 6. (v4) 점수에 따른 위험도 결정
+    # 6. 점수에 따른 위험도 결정 (v7 - 기준치 소폭 하향 조정)
     severity = 'low'
     violation = False
     if final_score >= 0.7:
@@ -412,7 +406,7 @@ def calculate_deterministic_score(article_score: float, universal_risks: List[Di
     elif final_score >= 0.5:
         severity = 'high'
         violation = True
-    elif final_score >= 0.3:
+    elif final_score >= 0.25: # 0.3 -> 0.25로 하향
         severity = 'medium'
         violation = True 
     elif final_score > 0.1:
@@ -422,8 +416,8 @@ def calculate_deterministic_score(article_score: float, universal_risks: List[Di
         severity = 'none'
         violation = False
 
-    print(f"📈 [자체 로직 점수 계산 v6] 후보 점수: {score_candidates}")
-    print(f"📈 [자체 로직 점수 계산 v6] 최종 점수: {final_score:.3f}, 위험도: {severity}")
+    print(f"📈 [자체 로직 점수 계산 v7] 후보 점수: {score_candidates}")
+    print(f"📈 [자체 로직 점수 계산 v7] 최종 점수: {final_score:.3f}, 위험도: {severity}")
     for r in reasoning:
         print(f"  - {r}")
 
@@ -434,13 +428,12 @@ def calculate_deterministic_score(article_score: float, universal_risks: List[Di
     }
 
 # =============================================================================
-# (수정) LLM에 '설명' 요청 (v6 - 수정본 유사도 언급)
+# LLM에 '설명' 요청 (v6 - 수정본 유사도 언급)
 # =============================================================================
 def ask_llm_explanation(context: str, user_text: str, score: float, severity: str, 
-                      article_id: str, top_cases: List[Dict]) -> Dict:
+                        article_id: str, top_cases: List[Dict]) -> Dict:
     """
-    (v6 수정) LLM에게 '왜 그런 판단이 나왔는지' 설명을 요청합니다.
-    - '비위반'일 경우, '수정본과의 유사도'를 근거로 들 수 있도록 프롬프트 수정
+    (v6) '비위반'일 경우, '수정본과의 유사도'를 근거로 들 수 있도록 프롬프트 수정
     """
     
     if LLM_CLIENT is None:
@@ -449,15 +442,14 @@ def ask_llm_explanation(context: str, user_text: str, score: float, severity: st
             'suggestion': 'LLM이 연결되지 않아 수정 제안을 생성할 수 없습니다.'
         }
     
-    # 상위 케이스에서 수정본 유사도 추출
     top_correction_sim = 0.0
     if top_cases:
         top_correction_sim = top_cases[0].get('similarity_correction', 0.0)
 
     # 비위반(low/none)일 경우
     if severity in ['low', 'none']:
-        # (v6 수정) 만약 수정본 유사도가 높다면, 그것을 '공정한 근거'로 사용
         if top_correction_sim > 0.5:
+            # (v6) 수정본 유사도가 높으면, 그것을 '공정한 근거'로 사용
             explanation_base = f"본 조항은 시스템 분석 결과, DB의 '공정한 수정본' 사례와 높은 유사도(유사도: {top_correction_sim:.2f})를 보여 '비위반(위험도 낮음)'으로 판단됩니다."
         else:
             explanation_base = "본 조항은 시스템 분석 결과, 현행 약관법 기준에 위배되는 명백한 위험 요소가 발견되지 않아 '비위반(위험도 낮음)'으로 판단됩니다."
@@ -483,7 +475,7 @@ def ask_llm_explanation(context: str, user_text: str, score: float, severity: st
         
         반드시 JSON 형식으로만 답변해주세요."""
 
-    # 위반(medium/high/critical)일 경우 (v4와 동일)
+    # 위반(medium/high/critical)일 경우 (v4 형식)
     else:
         system_prompt = """당신은 약관법 전문가입니다. 
         '판단'은 이미 시스템 로직에 의해 완료되었습니다. 당신의 역할은 그 판단이 왜 타당한지 근거를 들어 논리적으로 설명하고, 명확한 수정안을 제시하는 것입니다.
@@ -564,10 +556,10 @@ def ask_llm_explanation(context: str, user_text: str, score: float, severity: st
         }
 
 # =============================================================================
-# (수정) 메인 판단 로직 (v6 - best_match_case 수정)
+# 메인 판단 로직 (v6 - best_match_case 수정)
 # =============================================================================
 def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
-    """GraphRAG 기반 종합 판단 (v6 - 위반/수정 비교 로직 적용)"""
+    """GraphRAG 기반 종합 판단 (v7 - 버그 수정된 로직 적용)"""
     
     # --- 1단계 ~ 5단계: RAG로 근거 데이터 수집 ---
     article_id, article_score = detect_best_article(user_text)
@@ -582,12 +574,11 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
     all_cases = query_violation_cases(conn, article_id, limit=50)
     print(f"📊 [4/5] 검색된 사례: {len(all_cases)}개")
     
-    # (v6) find_top_similar_cases가 이제 similarity_violation, similarity_correction을 반환
     top_cases = find_top_similar_cases(user_text, all_cases, top_k=5)
     print(f"🎯 [5/5] 상위 유사 사례: {len(top_cases)}개")
     
-    # --- 6단계: 자체 로직으로 최종 '판단' (v6 로직 적용) ---
-    print("\n📈 [6/8] 자체 로직으로 점수 '판단' 중 (v6 가중치)...")
+    # --- 6단계: 자체 로직으로 최종 '판단' (v7 로직 적용) ---
+    print("\n📈 [6/8] 자체 로직으로 점수 '판단' 중 (v7 가중치)...")
     judgment_result = calculate_deterministic_score(
         article_score, universal_risks, combined_risks, top_cases
     )
@@ -608,14 +599,13 @@ def comprehensive_judgment(user_text: str, conn: Neo4jConnector) -> Dict:
     # --- 9단계: 최종 결과 구성 ---
     print("\n📋 [8/8] 최종 결과 구성 중...")
     
-    # (v6 수정) best_match_case 구성
     best_match_case_result = None
     if top_cases:
         best_case = top_cases[0]
         sim_v = best_case.get('similarity_violation', 0.0)
         sim_c = best_case.get('similarity_correction', 0.0)
         
-        # 위반 유사도가 0.4 이상일 때만 근거로 채택 (v5와 동일)
+        # (v6) 위반 유사도가 0.4 이상일 때만 근거로 채택
         if sim_v >= 0.4:
             best_match_case_result = {
                 "similarity_violation": sim_v,
@@ -692,7 +682,7 @@ def run(user_text: str) -> Dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("사용법: python scripts/judge_clause_v6.py '검사할 문장'")
+        print("사용법: python scripts/judge_clause.py '검사할 문장'")
         sys.exit(1)
     
     text = sys.argv[1]
@@ -706,3 +696,4 @@ if __name__ == "__main__":
     print("📋 최종 판단 결과")
     print(f"{'='*70}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+

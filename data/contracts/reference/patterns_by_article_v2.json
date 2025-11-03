@@ -15,6 +15,8 @@
         "high_risk_keywords": [
           "무조건",
           "어떠한 경우에도",
+          "어떠한 사유로도",
+          "어떠한 사유라도",
           "일체",
           "전부"
         ],
@@ -453,6 +455,66 @@
             "risk_level": "high"
           }
         ]
+      },
+      {
+        "keyword": "환불이 불가",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불 불가",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불은 불가",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불 불가능",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불이 불가능",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불은 불가능",
+        "risk_level": "critical",
+        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지합니다."
+      },
+      {
+        "keyword": "환불되지 않",
+        "risk_level": "critical",
+        "description": "환불 권리를 배제하는 조항입니다."
+      },
+      {
+        "keyword": "반환되지 않",
+        "risk_level": "critical",
+        "description": "결제 금액/포인트 등의 반환 권리를 배제하는 조항입니다."
+      },
+      {
+        "keyword": "환불받을 수 없",
+        "risk_level": "critical",
+        "description": "고객의 환불 권리를 원천적으로 차단합니다."
+      },
+      {
+        "keyword": "환불 받을 수 없",
+        "risk_level": "critical",
+        "description": "고객의 환불 권리를 원천적으로 차단합니다."
+      },
+      {
+        "keyword": "어떠한 환불도",
+        "risk_level": "critical",
+        "description": "포괄적인 환불 금지 조항입니다."
+      },
+      {
+        "keyword": "환불을 거부",
+        "risk_level": "critical",
+        "description": "사업자가 정당한 환불 요청을 거부할 수 있도록 하는 조항입니다."
       }
     ]
   },
@@ -534,8 +596,8 @@
     ]
   },
   "metadata": {
-    "version": "2.1",
-    "updated_date": "2025-11-03",
+    "version": "2.2",
+    "updated_date": "2025-11-04",
     "improvements": [
       "모든 패턴에 위험도(risk_level) 추가",
       "범용 위험 키워드(universal_risk_keywords) 추가",
@@ -543,7 +605,8 @@
       "복합 패턴 위험도(combined_pattern_risks) 추가",
       "제12조에 '서면 제한' 관련 키워드 대폭 강화",
       "'무조건', '고객이 부담', '별도 통지 없이', '즉시 채무 변제' 등 범용 위험 키워드 추가",
-      "(v2.1) '피해배상', '손해배상', '책임지지 않는다' 등 명백한 면책 키워드 critical 등급으로 대폭 보강"
+      "(v2.1) '피해배상', '손해배상', '책임지지 않는다' 등 명백한 면책 키워드 critical 등급으로 대폭 보강",
+      "(v2.2) '환불 불가', '환불 불가능', '반환되지 않는' 등 환불 금지 키워드 critical 등급으로 대폭 보강"
     ],
     "risk_level_definitions": {
       "critical": "즉각적이고 중대한 고객 피해 가능성",
@@ -553,3 +616,4 @@
     }
   }
 }
+
