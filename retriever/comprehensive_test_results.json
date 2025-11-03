@@ -1,0 +1,1134 @@
+{
+  "timestamp": "2025-11-04T04:25:58.956794",
+  "total_cases": 15,
+  "total_correct": 72,
+  "overall_accuracy": 65.45454545454545,
+  "article_stats": {
+    "제6조": {
+      "correct": 7,
+      "total": 13,
+      "wrong": [
+        {
+          "query": "고객이 예상하기 어려운 조항",
+          "expected": "제6조",
+          "actual": "제11조"
+        },
+        {
+          "query": "계약의 본질적 권리를 제한하는 조항",
+          "expected": "제6조",
+          "actual": "제11조"
+        },
+        {
+          "query": "신의성실의 원칙을 위반한 조항",
+          "expected": "제6조",
+          "actual": "제11조"
+        },
+        {
+          "query": "공정성을 잃은 불리한 조항",
+          "expected": "제6조",
+          "actual": "제11조"
+        },
+        {
+          "query": "고객이 예상할 수 없는 부당한 조항",
+          "expected": "제6조",
+          "actual": "제9조"
+        },
+        {
+          "query": "공정성을 해치는 약관",
+          "expected": "제6조",
+          "actual": "제9조"
+        }
+      ]
+    },
+    "제7조": {
+      "correct": 9,
+      "total": 15,
+      "wrong": [
+        {
+          "query": "사업자가 부담하여야 할 위험을 고객에게 떠넘긴다",
+          "expected": "제7조",
+          "actual": "제9조"
+        },
+        {
+          "query": "손해배상 책임을 전면적으로 배제한다",
+          "expected": "제7조",
+          "actual": "제9조"
+        },
+        {
+          "query": "견본이나 표시에 대한 책임을 배제한다",
+          "expected": "제7조",
+          "actual": "제9조"
+        },
+        {
+          "query": "어떠한 손해에 대해서도 배상하지 않는다",
+          "expected": "제7조",
+          "actual": "제9조"
+        },
+        {
+          "query": "전면 면책 조항",
+          "expected": "제7조",
+          "actual": "제9조"
+        },
+        {
+          "query": "책임을 완전히 배제하는 조항",
+          "expected": "제7조",
+          "actual": "제9조"
+        }
+      ]
+    },
+    "제8조": {
+      "correct": 2,
+      "total": 10,
+      "wrong": [
+        {
+          "query": "과도한 손해배상금을 부담해야 합니다",
+          "expected": "제8조",
+          "actual": "제7조"
+        },
+        {
+          "query": "고객에게 부당하게 과중한 지연 손해금을 부담시킨다",
+          "expected": "제8조",
+          "actual": "제7조"
+        },
+        {
+          "query": "과중한 위약금을 지급해야 한다",
+          "expected": "제8조",
+          "actual": "제11조"
+        },
+        {
+          "query": "지나치게 높은 손해배상금을 예정한다",
+          "expected": "제8조",
+          "actual": "제7조"
+        },
+        {
+          "query": "부당하게 과중한 배상금을 부담시킨다",
+          "expected": "제8조",
+          "actual": "제11조"
+        },
+        {
+          "query": "부당하게 높은 손해금을 예정한다",
+          "expected": "제8조",
+          "actual": "제7조"
+        },
+        {
+          "query": "과중한 배상 의무를 부담시킨다",
+          "expected": "제8조",
+          "actual": "제11조"
+        },
+        {
+          "query": "부당하게 과중한 손해배상액을 예정한다",
+          "expected": "제8조",
+          "actual": "제7조"
+        }
+      ]
+    },
+    "제9조": {
+      "correct": 10,
+      "total": 15,
+      "wrong": [
+        {
+          "query": "고객의 해지권 행사를 제한한다",
+          "expected": "제9조",
+          "actual": "제12조"
+        },
+        {
+          "query": "존속기간을 부당하게 단기 또는 장기로 한다",
+          "expected": "제9조",
+          "actual": "제11조"
+        },
+        {
+          "query": "묵시적인 기간 연장이 가능하도록 정하여 고객에게 불이익을 준다",
+          "expected": "제9조",
+          "actual": "제12조"
+        },
+        {
+          "query": "계약 해지가 불가능하도록 정한다",
+          "expected": "제9조",
+          "actual": "제7조"
+        },
+        {
+          "query": "계약 기간을 부당하게 자동 연장한다",
+          "expected": "제9조",
+          "actual": "제7조"
+        }
+      ]
+    },
+    "제10조": {
+      "correct": 10,
+      "total": 12,
+      "wrong": [
+        {
+          "query": "일방적으로 계약 내용을 수정할 수 있다",
+          "expected": "제10조",
+          "actual": "제7조"
+        },
+        {
+          "query": "이행 급부를 중단할 수 있는 권한을 부여한다",
+          "expected": "제10조",
+          "actual": "제7조"
+        }
+      ]
+    },
+    "제11조": {
+      "correct": 14,
+      "total": 15,
+      "wrong": [
+        {
+          "query": "고객이 제3자와 계약을 체결하는 것을 부당하게 제한한다",
+          "expected": "제11조",
+          "actual": "제14조"
+        }
+      ]
+    },
+    "제12조": {
+      "correct": 11,
+      "total": 12,
+      "wrong": [
+        {
+          "query": "의사표시 기한을 불확정하게 정한다",
+          "expected": "제12조",
+          "actual": "제9조"
+        }
+      ]
+    },
+    "제13조": {
+      "correct": 2,
+      "total": 8,
+      "wrong": [
+        {
+          "query": "고객의 대리인이 의무를 이행할 책임을 집니다",
+          "expected": "제13조",
+          "actual": "제11조"
+        },
+        {
+          "query": "대리인에게 고객의 의무를 부담시킨다",
+          "expected": "제13조",
+          "actual": "제9조"
+        },
+        {
+          "query": "대리인이 계약 의무를 이행할 책임을 진다",
+          "expected": "제13조",
+          "actual": "제7조"
+        },
+        {
+          "query": "대리인에게 책임을 가중시킨다",
+          "expected": "제13조",
+          "actual": "제12조"
+        },
+        {
+          "query": "고객의 대리인에게 의무 이행 책임을 부과한다",
+          "expected": "제13조",
+          "actual": "제7조"
+        },
+        {
+          "query": "대리인에게 고객의 채무를 이행할 책임을 지운다",
+          "expected": "제13조",
+          "actual": "제7조"
+        }
+      ]
+    },
+    "제14조": {
+      "correct": 7,
+      "total": 10,
+      "wrong": [
+        {
+          "query": "이 계약에 관한 소송은 회사 본사 소재지 관할법원으로 합니다",
+          "expected": "제14조",
+          "actual": "제7조"
+        },
+        {
+          "query": "재판관할의 합의 조항이 고객에게 불리하다",
+          "expected": "제14조",
+          "actual": "제7조"
+        },
+        {
+          "query": "고객에게 부당하게 불리한 관할 합의",
+          "expected": "제14조",
+          "actual": "제6조"
+        }
+      ]
+    }
+  },
+  "detailed_results": [
+    {
+      "query": "고객에게 부당하게 불리한 조항",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.7070360070509616,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "공정성을 잃은 약관 조항",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.6766052183647856,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객이 예상하기 어려운 조항",
+      "expected": "제6조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.74706264241953,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "계약의 본질적 권리를 제한하는 조항",
+      "expected": "제6조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.7552680082305173,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "부당하게 불리한 내용을 정하고 있는 조항",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.7266682389504598,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객에게 불공정한 약관",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.6961949772042579,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "신의성실의 원칙을 위반한 조항",
+      "expected": "제6조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.7103841364572423,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "공정성을 잃은 불리한 조항",
+      "expected": "제6조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.6848535209713312,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객이 예상할 수 없는 부당한 조항",
+      "expected": "제6조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6817407932896059,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "본질적 권리를 과도하게 제한하는 조항",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.6922102127593152,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "부당하게 불리한 거래조건",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.7274345458010594,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "공정성을 해치는 약관",
+      "expected": "제6조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.7144731974622587,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객에게 불공정한 계약 조건",
+      "expected": "제6조",
+      "actual": "제6조",
+      "correct": true,
+      "integrated_score": 0.7123150858038263,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "회사는 어떠한 피해배상도 하지않는다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7286659076562476,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "사업자의 고의 또는 중대한 과실로 인한 책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7690530004346525,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "상당한 이유 없이 사업자의 손해배상 범위를 제한한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7390814076275732,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "사업자가 부담하여야 할 위험을 고객에게 떠넘긴다",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6253336165936982,
+      "llm_probability": 0.8
+    },
+    {
+      "query": "상당한 이유 없이 사업자의 담보책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7631357695382713,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "어떠한 경우에도 회사는 책임을 지지 않는다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7370653278175077,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "면책 조항으로 모든 책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7487477521809566,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "손해배상 책임을 전면적으로 배제한다",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6907003214177092,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고의 또는 중대한 과실에 대한 법률상 책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7664569794001829,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "사업자의 담보책임을 제한하거나 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.7336019245273605,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "품질 보장에 대한 책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제7조",
+      "correct": true,
+      "integrated_score": 0.6806407915650461,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "견본이나 표시에 대한 책임을 배제한다",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6868540676874438,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "어떠한 손해에 대해서도 배상하지 않는다",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6925339845688381,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "전면 면책 조항",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6935012518052499,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "책임을 완전히 배제하는 조항",
+      "expected": "제7조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.7107968305113428,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "과도한 손해배상금을 부담해야 합니다",
+      "expected": "제8조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7097421733924358,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "고객에게 부당하게 과중한 지연 손해금을 부담시킨다",
+      "expected": "제8조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6853783029497562,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "과중한 위약금을 지급해야 한다",
+      "expected": "제8조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.734242677033607,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "지나치게 높은 손해배상금을 예정한다",
+      "expected": "제8조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6815135548892386,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "부당하게 과중한 배상금을 부담시킨다",
+      "expected": "제8조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.620589409327134,
+      "llm_probability": 0.8
+    },
+    {
+      "query": "과도한 지연 손해금을 청구한다",
+      "expected": "제8조",
+      "actual": "제8조",
+      "correct": true,
+      "integrated_score": 0.6908964238353451,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "부당하게 높은 손해금을 예정한다",
+      "expected": "제8조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6819836692306083,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "과중한 배상 의무를 부담시킨다",
+      "expected": "제8조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.7164206976250462,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "지연 이자와 손해금을 과도하게 청구한다",
+      "expected": "제8조",
+      "actual": "제8조",
+      "correct": true,
+      "integrated_score": 0.6827965849792554,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "부당하게 과중한 손해배상액을 예정한다",
+      "expected": "제8조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6796182517903079,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "계약을 해지할 수 없습니다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.7546132683361002,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "법률에 따른 고객의 해제권을 배제한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.8277871778697146,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "고객의 해지권 행사를 제한한다",
+      "expected": "제9조",
+      "actual": "제12조",
+      "correct": false,
+      "integrated_score": 0.67770662238297,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "사업자에게 법률에서 규정하지 않은 해제권을 부여한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.7898361084561281,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "사업자의 해제권 행사 요건을 완화한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.7231579785978385,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "계약 해제 시 원상회복의무를 고객에게 과중하게 부담시킨다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.805060686289645,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객의 원상회복 청구권을 부당하게 포기하도록 한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.8317741130944795,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "해제 또는 해지로 인한 사업자의 원상회복의무를 부당하게 경감한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.8147604765212355,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "존속기간을 부당하게 단기 또는 장기로 한다",
+      "expected": "제9조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.6849247971736603,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "묵시적인 기간 연장이 가능하도록 정하여 고객에게 불이익을 준다",
+      "expected": "제9조",
+      "actual": "제12조",
+      "correct": false,
+      "integrated_score": 0.7129830687050536,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 해제권을 완전히 배제한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.708027516242162,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "계약 해지가 불가능하도록 정한다",
+      "expected": "제9조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7449719934708103,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "사업자에게만 일방적인 해제권을 부여한다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.7886133434864014,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "원상회복 의무를 고객에게만 부담시킨다",
+      "expected": "제9조",
+      "actual": "제9조",
+      "correct": true,
+      "integrated_score": 0.7720562370117776,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "계약 기간을 부당하게 자동 연장한다",
+      "expected": "제9조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6771816598670567,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "회사가 일방적으로 계약을 변경할 수 있습니다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7674607641455764,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "상당한 이유 없이 급부의 내용을 사업자가 일방적으로 결정할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7518412064545305,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "사업자가 이행하여야 할 급부를 일방적으로 중지할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7991355024365092,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "제3자에게 대행할 수 있게 하는 조항",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.6508570151342158,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "급부 내용을 사업자가 임의로 변경할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7829833429338416,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "일방적으로 계약 내용을 수정할 수 있다",
+      "expected": "제10조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7128827506021752,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "이행 급부를 중단할 수 있는 권한을 부여한다",
+      "expected": "제10조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7431413000163258,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "급부를 제3자에게 위임할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.6395671502698178,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "사업자가 일방적으로 서비스 내용을 변경한다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7266782587406477,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "계약 조건을 사업자가 임의로 수정할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7199352613474149,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "급부의 이행을 중지할 수 있는 권한을 가진다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.6995902668730076,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "일방적으로 계약 이행을 변경하거나 중지할 수 있다",
+      "expected": "제10조",
+      "actual": "제10조",
+      "correct": true,
+      "integrated_score": 0.7541620049606816,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객은 기한의 이익을 상실합니다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.8160137409316064,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 항변권과 상계권을 배제합니다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.886844857821316,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "법률에 따른 고객의 항변권을 상당한 이유 없이 배제한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.746247823029478,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객의 상계권을 제한한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7665332634757249,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "기한의 이익을 박탈한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7342592251460776,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객이 제3자와 계약을 체결하는 것을 부당하게 제한한다",
+      "expected": "제11조",
+      "actual": "제14조",
+      "correct": false,
+      "integrated_score": 0.6797118817485448,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "사업자가 업무상 알게 된 고객의 비밀을 정당한 이유 없이 누설하는 것을 허용한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.6642035504727416,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객의 기한의 이익을 상실시킨다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.819568986756618,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "항변권을 배제하거나 제한한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.8383613020686148,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "상계권을 상당한 이유 없이 배제한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7478057556060469,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "기한의 이익을 상당한 이유 없이 박탈한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7179685389040261,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "제3자와의 계약 체결을 부당하게 금지한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7144454274438687,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 비밀을 누설할 수 있도록 허용한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7336991121327127,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "고객의 권리를 부당하게 제한한다",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.6894250251964837,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "기한의 이익을 상실하게 하는 조항",
+      "expected": "제11조",
+      "actual": "제11조",
+      "correct": true,
+      "integrated_score": 0.7282506873454468,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객이 답변하지 않으면 동의한 것으로 간주합니다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7147002658432635,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "일정한 작위 또는 부작위가 있을 경우 고객의 의사표시가 표명된 것으로 본다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7168447307723708,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 의사표시 형식에 대하여 부당하게 엄격한 제한을 둔다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.820207184089178,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 이익에 중대한 영향을 미치는 사업자의 의사표시가 도달된 것으로 본다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7466091913656523,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "사업자의 의사표시 기한을 부당하게 길게 정한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7331541527566322,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "부작위를 의사표시로 간주한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7577916555928396,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "답변 없음을 동의로 간주한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.6897551793558456,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "의사표시 요건을 부당하게 엄격하게 한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7106909171405476,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "사업자의 통지를 도달된 것으로 간주한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.6961049054972578,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "의사표시 기한을 불확정하게 정한다",
+      "expected": "제12조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.7153760428403756,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "작위나 부작위를 의사표시로 의제한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7077897472893449,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객의 의사표시를 부당하게 제한한다",
+      "expected": "제12조",
+      "actual": "제12조",
+      "correct": true,
+      "integrated_score": 0.7351034045773814,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객의 대리인이 의무를 이행할 책임을 집니다",
+      "expected": "제13조",
+      "actual": "제11조",
+      "correct": false,
+      "integrated_score": 0.7169461899824772,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "대리인에 의하여 계약이 체결된 경우 대리인에게 의무의 전부를 이행할 책임을 지운다",
+      "expected": "제13조",
+      "actual": "제13조",
+      "correct": true,
+      "integrated_score": 0.7203209474313481,
+      "llm_probability": 1.0
+    },
+    {
+      "query": "고객이 의무를 이행하지 아니하는 경우 대리인에게 그 의무를 이행할 책임을 지운다",
+      "expected": "제13조",
+      "actual": "제13조",
+      "correct": true,
+      "integrated_score": 0.7131859816488371,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "대리인에게 고객의 의무를 부담시킨다",
+      "expected": "제13조",
+      "actual": "제9조",
+      "correct": false,
+      "integrated_score": 0.6906223697506547,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "대리인이 계약 의무를 이행할 책임을 진다",
+      "expected": "제13조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6935444360537707,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "대리인에게 책임을 가중시킨다",
+      "expected": "제13조",
+      "actual": "제12조",
+      "correct": false,
+      "integrated_score": 0.6834420843156539,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "고객의 대리인에게 의무 이행 책임을 부과한다",
+      "expected": "제13조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7110264092326569,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "대리인에게 고객의 채무를 이행할 책임을 지운다",
+      "expected": "제13조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.6975107816927792,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "이 계약에 관한 소송은 회사 본사 소재지 관할법원으로 합니다",
+      "expected": "제14조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7054083188584531,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객에게 부당하게 불리한 소송 제기 금지 조항",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.8019319658927531,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "재판관할의 합의 조항이 고객에게 불리하다",
+      "expected": "제14조",
+      "actual": "제7조",
+      "correct": false,
+      "integrated_score": 0.7190959758194101,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "상당한 이유 없이 고객에게 입증책임을 부담시킨다",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.8021284664831957,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "소송 제기를 금지하는 조항",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.7833373707181626,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "관할법원을 사업자에게 유리하게 정한다",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.7411187400689422,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객에게 불리한 재판관할 합의",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.814434889818411,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "입증책임을 고객에게 부담시킨다",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.6989171233092425,
+      "llm_probability": 0.9
+    },
+    {
+      "query": "소송 제기 금지 또는 관할법원 지정",
+      "expected": "제14조",
+      "actual": "제14조",
+      "correct": true,
+      "integrated_score": 0.8405319053178417,
+      "llm_probability": 0.95
+    },
+    {
+      "query": "고객에게 부당하게 불리한 관할 합의",
+      "expected": "제14조",
+      "actual": "제6조",
+      "correct": false,
+      "integrated_score": 0.7295010482942207,
+      "llm_probability": 0.95
+    }
+  ]
+}
