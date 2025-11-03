@@ -9,9 +9,17 @@
           "중과실",
           "책임",
           "배제",
-          "면책"
+          "면책",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "어떠한 경우에도",
+          "일체",
+          "전부"
         ],
         "description": "고의·중과실 면책 조항",
+        "risk_level": "high",
         "example_count": 12,
         "examples": [
           "[펌뱅킹 서비스 이용계약서] 제6조 업무처리 일반 3. 은행은 이용기관이 전송한 거래지시 또는 자료 등이 착오, 오용, 유용, 위조, 변조 및 기타의 사고에 의한 것이라도 은행은 ",
@@ -23,9 +31,16 @@
         "keywords": [
           "담보",
           "책임",
-          "배제"
+          "배제",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "일체의 책임을 지지 않",
+          "책임 없음"
         ],
         "description": "담보책임 배제",
+        "risk_level": "high",
         "example_count": 15,
         "examples": [
           "[외환거래약정서] 제8조 담보와 보증 거래처는 외환거래의 채무와 관련하여 은행의 요구가 있을 때에는 은행이 만족할만한 담보를 제공하며, 환율·금리 등의 변동으로 담보가치가 부족한 ",
@@ -43,9 +58,19 @@
         "keywords": [
           "일방적",
           "결정",
-          "변경"
+          "변경",
+          "무조건",
+          "별도 통지 없이"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "별도 통지 없이",
+          "사전 통지 없이",
+          "임의로",
+          "단독으로"
         ],
         "description": "급부의 일방적 결정/변경",
+        "risk_level": "high",
         "example_count": 10,
         "examples": [
           "[폰뱅킹서비스 이용약관] 제 3 조 (서비스의 종류) 2. 은행은 필요한 경우 서비스의 종류와 내용을 추가, 변경, 제한할 수 있습 니다.",
@@ -57,9 +82,18 @@
         "keywords": [
           "이행",
           "중지",
-          "일방적"
+          "일방적",
+          "무조건",
+          "별도 통지 없이"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "별도 통지 없이",
+          "즉시",
+          "통지 없이"
         ],
         "description": "급부 이행의 일방적 중지",
+        "risk_level": "critical",
         "example_count": 3,
         "examples": [
           "【선불전자지급수단 이용약관(은행)】 제11조 이용의 제한 ① 다음 각 호 1의 경우에 △△△는 해당 이용자에 대한 서비스의 전부 또는 일부를 제한할 수 있습니다. 5. 기타 앱 등",
@@ -78,9 +112,18 @@
           "해제",
           "해지",
           "배제",
-          "제한"
+          "제한",
+          "무조건",
+          "즉시"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "즉시",
+          "별도 통지 없이",
+          "일방적으로"
         ],
         "description": "해제·해지권 배제/제한",
+        "risk_level": "high",
         "example_count": 23,
         "examples": [
           "전자금융서비스 이용 약관] 제15조(거래 계약의 해지) 2. 다음 각호의 어느 하나에 해당하는 경우에는 상호저축은행은 고객 본인의 의사를확인하지 않고 서비스를 해지할 수 있다. 1",
@@ -91,9 +134,19 @@
       {
         "keywords": [
           "존속기간",
-          "부당"
+          "부당",
+          "자동연장",
+          "자동갱신",
+          "무조건"
         ],
-        "description": "부당한 존속기간",
+        "high_risk_keywords": [
+          "자동연장",
+          "자동갱신",
+          "무조건",
+          "별도 통지 없이"
+        ],
+        "description": "부당한 존속기간 및 자동갱신",
+        "risk_level": "medium",
         "example_count": 3,
         "examples": [
           "【오픈뱅킹서비스 이용약관】\r\n  제6조 (이용계약의 해지)\r\n  3“회사”는 “이용자”에게 다음 각 호에 해당하는 사유가 발생하거나 확인된 경우 “이용계약”을 해지할 수 있습니다.",
@@ -111,9 +164,16 @@
         "keywords": [
           "의사표시",
           "간주",
-          "의제"
+          "의제",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "자동",
+          "간주한다"
         ],
         "description": "의사표시 의제",
+        "risk_level": "medium",
         "example_count": 5,
         "examples": [
           "[적립식 외화예금특약] 제10조 계약중도해지 예금주가 만기일전에 분할중도 인출 가능한 횟수인 5회(가입 후 6개월이 경과하지 않은 경우는 3회)를 초과하거나 또는 1회에 3회차 납",
@@ -124,9 +184,31 @@
       {
         "keywords": [
           "서면",
-          "제한"
+          "제한",
+          "서면으로만",
+          "서면통지",
+          "반드시 서면으로",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "서면으로만",
+          "반드시 서면으로",
+          "서면에 한하여",
+          "무조건"
+        ],
+        "combined_high_risk": [
+          {
+            "condition": "서면 제한 + 자동연장",
+            "keywords": [
+              "서면으로만",
+              "자동연장"
+            ],
+            "risk_level": "critical",
+            "description": "서면 제한과 자동연장이 함께 있는 경우 고객의 의사표시가 극도로 제한됨"
+          }
         ],
         "description": "서면으로만 제한",
+        "risk_level": "high",
         "example_count": 3,
         "examples": [
           "[포페이팅 거래 기본약정서] 제5조(약정 기간) 본 약정의 약정기간은 __부터 __까지 1년으로 하며 이후에는 일방 당사자가본 약정을 개정 또는 해지하겠다는 서면 통지를 약정 만기",
@@ -138,9 +220,17 @@
         "keywords": [
           "통지",
           "도달",
-          "간주"
+          "간주",
+          "무조건",
+          "별도 통지 없이"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "별도 통지 없이",
+          "자동으로 도달"
         ],
         "description": "통지 도달 간주",
+        "risk_level": "medium",
         "example_count": 7,
         "examples": [
           "[포페이팅 거래 기본약정서] 제5조(약정 기간) 본 약정의 약정기간은 __부터 __까지 1년으로 하며 이후에는 일방 당사자가본 약정을 개정 또는 해지하겠다는 서면 통지를 약정 만기",
@@ -157,9 +247,18 @@
       {
         "keywords": [
           "부당",
-          "불리"
+          "불리",
+          "고객이 부담",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "고객이 부담",
+          "고객의 부담으로",
+          "무조건",
+          "전적으로 고객이"
         ],
         "description": "고객에게 부당하게 불리한 표현",
+        "risk_level": "high",
         "example_count": 1,
         "examples": [
           "【○○○ 서비스 이용약관】\r\n  제4조 (이용계약의 성립 및 제한)\r\n  ② 회사의 승낙 후 다음 각 호 어느 하나에 해당하는 것이 확인될 경우 이용자에게 14일의 기간을 부여하여"
@@ -169,9 +268,17 @@
         "keywords": [
           "본질적",
           "권리",
-          "제한"
+          "제한",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "일체",
+          "포기",
+          "행사할 수 없"
         ],
         "description": "본질적 권리 제한",
+        "risk_level": "critical",
         "example_count": 18,
         "examples": [
           "[외환거래약정서] 제9조 제3자의 변제 및 대위변제 ② 연대보증인, 연대채무자 등 이해관계인은 변제 등에 따른 대위에 의하여 은행으로부터취득한 권리를 은행과 본인간의 거래가 계속되",
@@ -189,9 +296,21 @@
         "keywords": [
           "기한",
           "이익",
-          "박탈"
+          "박탈",
+          "즉시",
+          "무조건",
+          "별도 통지 없이",
+          "즉시 채무 변제"
+        ],
+        "high_risk_keywords": [
+          "즉시 채무 변제",
+          "즉시 상환",
+          "무조건",
+          "별도 통지 없이",
+          "당연히 상실"
         ],
         "description": "기한의 이익 박탈",
+        "risk_level": "critical",
         "example_count": 4,
         "examples": [
           "[사이버브랜치 표준계약서] 제13조 (청렴계약조항) ③ “갑”은 청렴계약조항 이행과 관련된 불이익 처분에 대하여 민형사상 일체의이의를 제기할 수 없다",
@@ -208,9 +327,16 @@
       {
         "keywords": [
           "소송",
-          "금지"
+          "금지",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "소송 제기 불가",
+          "제기할 수 없"
         ],
         "description": "소송 제기 금지",
+        "risk_level": "critical",
         "example_count": 3,
         "examples": [
           "[공제약관] 제42조(관할법원) 이 계약에 관한 소송은 은행의 본점소재지를 관할하는 법원으로 합니다. 다만, 은행과 계약자가 합의하여 관할법원을 달리 정할 수 있습니다.",
@@ -221,9 +347,16 @@
       {
         "keywords": [
           "관할",
-          "불리"
+          "불리",
+          "무조건"
+        ],
+        "high_risk_keywords": [
+          "무조건",
+          "전속",
+          "오직"
         ],
         "description": "불리한 재판관할",
+        "risk_level": "medium",
         "example_count": 3,
         "examples": [
           "[공제약관] 제42조(관할법원) 이 계약에 관한 소송은 은행의 본점소재지를 관할하는 법원으로 합니다. 다만, 은행과 계약자가 합의하여 관할법원을 달리 정할 수 있습니다.",
@@ -232,5 +365,165 @@
         ]
       }
     ]
+  },
+  "universal_risk_keywords": {
+    "description": "모든 조항에 걸쳐 위험한 범용 키워드",
+    "keywords": [
+      {
+        "keyword": "무조건",
+        "risk_level": "high",
+        "description": "절대적이고 예외 없는 조건은 고객에게 불리"
+      },
+      {
+        "keyword": "고객이 부담",
+        "risk_level": "high",
+        "description": "위험이나 비용을 고객에게 전가"
+      },
+      {
+        "keyword": "별도 통지 없이",
+        "risk_level": "high",
+        "description": "고객의 알 권리 침해"
+      },
+      {
+        "keyword": "즉시 채무 변제",
+        "risk_level": "critical",
+        "description": "기한의 이익 즉시 박탈"
+      },
+      {
+        "keyword": "즉시",
+        "risk_level": "medium",
+        "description": "고객에게 준비 시간을 주지 않음",
+        "combined_risk": [
+          {
+            "with": [
+              "해지",
+              "상실",
+              "변제"
+            ],
+            "risk_level": "critical"
+          }
+        ]
+      },
+      {
+        "keyword": "일체",
+        "risk_level": "high",
+        "description": "모든 것을 포괄적으로 배제/제한"
+      },
+      {
+        "keyword": "어떠한 경우에도",
+        "risk_level": "high",
+        "description": "절대적 면책 또는 제한"
+      },
+      {
+        "keyword": "자동",
+        "risk_level": "medium",
+        "description": "고객의 명시적 의사 없이 진행",
+        "combined_risk": [
+          {
+            "with": [
+              "연장",
+              "갱신",
+              "변경"
+            ],
+            "risk_level": "high"
+          }
+        ]
+      }
+    ]
+  },
+  "combined_pattern_risks": {
+    "description": "여러 키워드가 복합적으로 나타날 때 위험도가 급증하는 패턴",
+    "patterns": [
+      {
+        "combination": [
+          "서면으로만",
+          "자동연장"
+        ],
+        "articles": [
+          "제12조",
+          "제9조"
+        ],
+        "risk_level": "critical",
+        "description": "서면 제한 + 자동연장: 고객이 반대 의사를 표시하기 극도로 어려움"
+      },
+      {
+        "combination": [
+          "별도 통지 없이",
+          "즉시",
+          "해지"
+        ],
+        "articles": [
+          "제9조",
+          "제10조"
+        ],
+        "risk_level": "critical",
+        "description": "통지 없이 즉시 해지: 고객의 대응 기회 박탈"
+      },
+      {
+        "combination": [
+          "무조건",
+          "고객이 부담"
+        ],
+        "articles": [
+          "제6조",
+          "제7조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 고객 부담: 위험의 일방적 전가"
+      },
+      {
+        "combination": [
+          "즉시",
+          "채무",
+          "변제"
+        ],
+        "articles": [
+          "제11조"
+        ],
+        "risk_level": "critical",
+        "description": "즉시 채무 변제: 기한의 이익 즉각 박탈"
+      },
+      {
+        "combination": [
+          "일방적",
+          "별도 통지 없이"
+        ],
+        "articles": [
+          "제10조"
+        ],
+        "risk_level": "critical",
+        "description": "일방적이며 통지도 없음: 고객 보호 장치 전무"
+      },
+      {
+        "combination": [
+          "서면",
+          "30일 이내",
+          "자동"
+        ],
+        "articles": [
+          "제12조"
+        ],
+        "risk_level": "high",
+        "description": "짧은 기간 + 서면 제한 + 자동: 현실적 대응 불가"
+      }
+    ]
+  },
+  "metadata": {
+    "version": "2.0",
+    "updated_date": "2025-11-03",
+    "improvements": [
+      "모든 패턴에 위험도(risk_level) 추가",
+      "범용 위험 키워드(universal_risk_keywords) 추가",
+      "고위험 키워드(high_risk_keywords) 별도 분류",
+      "복합 패턴 위험도(combined_pattern_risks) 추가",
+      "제12조에 '서면 제한' 관련 키워드 대폭 강화",
+      "'무조건', '고객이 부담', '별도 통지 없이', '즉시 채무 변제' 등 범용 위험 키워드 추가"
+    ],
+    "risk_level_definitions": {
+      "critical": "즉각적이고 중대한 고객 피해 가능성",
+      "high": "심각한 고객 불이익 우려",
+      "medium": "상당한 고객 불이익 가능성",
+      "low": "경미한 불공정 요소"
+    }
   }
 }

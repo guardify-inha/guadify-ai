@@ -27,25 +27,36 @@ class ViolationCaseBuilder:
         self.patterns = self.load_patterns()
     
     def load_patterns(self):
+        """patterns_by_article_v2.json 로드"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
-        pattern_file = os.path.join(project_root, 'data', 'contracts', 'reference', 'patterns_by_article.json')
+        # ✅ 변경: patterns_by_article_v2.json 사용
+        pattern_file = os.path.join(project_root, 'data', 'contracts', 'reference', 'patterns_by_article_v2.json')
         
         try:
             with open(pattern_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
+                patterns = json.load(f)
+                print(f"✓ 패턴 파일 로드: {pattern_file}")
+                return patterns
+        except FileNotFoundError:
+            print(f"⚠️  패턴 파일 없음: {pattern_file}")
+            return {}
+        except Exception as e:
+            print(f"⚠️  패턴 로드 실패: {e}")
             return {}
     
     def build_violation_graph(self, csv_path=None):
+        """위반 사례 그래프 구축"""
         if csv_path is None:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(script_dir)
-            csv_path = os.path.join(project_root, 'data', 'contracts', 'reference', 'corrected_terms.csv')
+            # ✅ 변경: 보도자료_데이터_전처리_최종.csv 사용
+            csv_path = os.path.join(project_root, 'data', 'contracts', 'reference', '보도자료_데이터_전처리_최종.csv')
         
         print("\n" + "=" * 70)
         print("📊 위반 사례 추가")
         print("=" * 70)
+        print(f"CSV 파일: {os.path.basename(csv_path)}")
         
         # ✅ 시작 전 조 개수 확인
         initial_count = self.count_articles()
@@ -57,8 +68,18 @@ class ViolationCaseBuilder:
         
         # CSV 로드
         try:
-            df = pd.read_csv(csv_path, encoding='utf-8-sig')
-            print(f"✓ CSV 로드: {len(df)}개 행")
+            # UTF-8-SIG 인코딩 시도
+            try:
+                df = pd.read_csv(csv_path, encoding='utf-8-sig')
+            except:
+                # CP949 인코딩 시도
+                df = pd.read_csv(csv_path, encoding='cp949')
+            
+            print(f"✓ CSV 로드 성공: {len(df)}개 행")
+            print(f"  컬럼: {', '.join(df.columns.tolist()[:5])}...")
+        except FileNotFoundError:
+            print(f"❌ CSV 파일을 찾을 수 없습니다: {csv_path}")
+            return
         except Exception as e:
             print(f"✗ CSV 로드 실패: {e}")
             return
@@ -98,7 +119,7 @@ class ViolationCaseBuilder:
                 case_id=str(row.get('ID', idx)),
                 unfair_text=str(row.get('불공정 약관 원문', '')),
                 reason=str(row.get('시정 요청 사유', '')),
-                legal_basis=str(row.get('근거 조항', '')),
+                legal_basis=str(row.get('근거 조항(약관법)', '')),
                 company=str(row.get('파일명', '')),
                 category=category
             )
@@ -155,11 +176,14 @@ class ViolationCaseBuilder:
             '위약': '제8조',
             '해제': '제9조',
             '해지': '제9조',
+            '계약의 해제': '제9조',
             '변경': '제10조',
             '급부': '제10조',
             '중지': '제10조',
+            '채무의 이행': '제10조',
             '기한': '제11조',
             '이익': '제11조',
+            '고객의 권익': '제11조',
             '의사표시': '제12조',
             '간주': '제12조',
             '의제': '제12조',
@@ -209,14 +233,35 @@ class ViolationCaseBuilder:
                                unfair_text, reason, legal_basis, company, category):
         """위반 사례 생성 (CREATE만 사용, 조는 건드리지 않음)"""
         
-        # 패턴
+        # 패턴 매칭 (v2 JSON 구조에 맞춤)
         patterns = []
         pattern_keywords = []
+        high_risk_keywords = []
+        risk_level = "medium"
+        
         if article_id in self.patterns:
-            for p in self.patterns[article_id].get('patterns', []):
-                if any(kw in unfair_text for kw in p['keywords']):
-                    patterns.append(p['description'])
-                    pattern_keywords.extend(p['keywords'])
+            article_patterns = self.patterns[article_id].get('patterns', [])
+            for p in article_patterns:
+                # 기본 키워드 체크
+                if any(kw in unfair_text for kw in p.get('keywords', [])):
+                    patterns.append(p.get('description', ''))
+                    pattern_keywords.extend(p.get('keywords', []))
+                    
+                    # 고위험 키워드 체크
+                    high_risk = p.get('high_risk_keywords', [])
+                    if any(kw in unfair_text for kw in high_risk):
+                        high_risk_keywords.extend(high_risk)
+                        risk_level = p.get('risk_level', 'medium')
+        
+        # 범용 위험 키워드 체크 (universal_risk_keywords)
+        universal_risks = self.patterns.get('universal_risk_keywords', {})
+        if universal_risks:
+            for risk_item in universal_risks.get('keywords', []):
+                keyword = risk_item.get('keyword', '')
+                if keyword and keyword in unfair_text:
+                    high_risk_keywords.append(keyword)
+                    if risk_item.get('risk_level') == 'critical':
+                        risk_level = 'critical'
         
         # 임베딩
         embedding = None
@@ -250,6 +295,8 @@ class ViolationCaseBuilder:
             category: $category,
             patterns: $patterns,
             pattern_keywords: $pattern_keywords,
+            high_risk_keywords: $high_risk_keywords,
+            risk_level: $risk_level,
             embedding: $embedding
         }})
         CREATE (n)-[:HAS_VIOLATION]->(v)
@@ -269,11 +316,13 @@ class ViolationCaseBuilder:
                 "category": category[:100],
                 "patterns": patterns,
                 "pattern_keywords": list(set(pattern_keywords)),
+                "high_risk_keywords": list(set(high_risk_keywords)),
+                "risk_level": risk_level,
                 "embedding": embedding
             })
             return result[0]["id"] if result else None
         except Exception as e:
-            print(f"   ✗ 생성 실패: {e}")
+            print(f"   ✗ 생성 실패 ({case_id}): {e}")
             return None
     
     def create_correction(self, violation_id, corrected_text):
@@ -308,27 +357,44 @@ class ViolationCaseBuilder:
     
     def add_patterns_to_articles(self):
         """조항에 패턴 추가 (SET만 사용, 생성/삭제 없음)"""
+        print("\n패턴 정보를 조에 추가 중...")
+        
         for article_id, data in self.patterns.items():
-            descriptions = [p['description'] for p in data.get('patterns', [])]
+            # universal_risk_keywords 같은 메타데이터는 스킵
+            if article_id not in ['제6조', '제7조', '제8조', '제9조', '제10조', '제11조', '제12조', '제13조', '제14조']:
+                continue
+            
+            descriptions = [p.get('description', '') for p in data.get('patterns', [])]
             keywords = []
+            high_risk_keywords = []
+            
             for p in data.get('patterns', []):
-                keywords.extend(p['keywords'])
+                keywords.extend(p.get('keywords', []))
+                high_risk_keywords.extend(p.get('high_risk_keywords', []))
             
             # ✅ SET만 사용 (조를 건드리지 않고 속성만 추가)
             query = """
             MATCH (a:조 {id: $article_id})
             SET a.patterns = $patterns,
-                a.pattern_keywords = $keywords
+                a.pattern_keywords = $keywords,
+                a.high_risk_keywords = $high_risk_keywords,
+                a.title = $title,
+                a.case_count = $case_count
             """
             
             try:
                 self.connector.execute_query(query, {
                     "article_id": article_id,
                     "patterns": descriptions,
-                    "keywords": list(set(keywords))
+                    "keywords": list(set(keywords)),
+                    "high_risk_keywords": list(set(high_risk_keywords)),
+                    "title": data.get('title', ''),
+                    "case_count": data.get('case_count', 0)
                 })
-            except:
-                pass
+            except Exception as e:
+                print(f"   ✗ 패턴 추가 실패 ({article_id}): {e}")
+        
+        print("✓ 패턴 추가 완료")
     
     def print_statistics(self):
         """통계"""
@@ -363,6 +429,32 @@ class ViolationCaseBuilder:
         result = self.connector.execute_query(query)
         for row in result:
             print(f"   {row['article']} ({row['title']}): {row['count']}개")
+        
+        # 위험도별 통계
+        print("\n위험도별 위반사례:")
+        query = """
+        MATCH (v:위반사례)
+        WITH v.risk_level as level, count(v) as count
+        RETURN level, count
+        ORDER BY 
+            CASE level
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 5
+            END
+        """
+        result = self.connector.execute_query(query)
+        for row in result:
+            level_emoji = {
+                'critical': '⚫',
+                'high': '🔴',
+                'medium': '🟡',
+                'low': '🟢'
+            }
+            emoji = level_emoji.get(row['level'], '⚪')
+            print(f"   {emoji} {row['level'].upper()}: {row['count']}개")
 
 
 def main():
