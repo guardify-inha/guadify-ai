@@ -1,0 +1,470 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    background: white;
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    border: 1px solid #e0e0e0;
+}
+
+header {
+    background: #1e3a8a;
+    color: white;
+    padding: 40px;
+    text-align: center;
+}
+
+header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+.subtitle {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+main {
+    padding: 40px;
+}
+
+/* 탭 스타일 */
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.tab-btn {
+    padding: 12px 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    color: #1e3a8a;
+    border-bottom-color: #1e3a8a;
+}
+
+.tab-btn:hover {
+    color: #1e3a8a;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* 텍스트 입력 영역 */
+#contract-text {
+    width: 100%;
+    padding: 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 1em;
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color 0.3s;
+}
+
+#contract-text:focus {
+    outline: none;
+    border-color: #1e3a8a;
+}
+
+/* 파일 업로드 영역 */
+.file-upload-area {
+    border: 3px dashed #e0e0e0;
+    border-radius: 10px;
+    padding: 60px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: #f9f9f9;
+}
+
+.file-upload-area:hover {
+    border-color: #1e3a8a;
+    background: #f0f4ff;
+}
+
+.file-upload-area.dragover {
+    border-color: #1e3a8a;
+    background: #e0e8ff;
+}
+
+.upload-icon {
+    font-size: 4em;
+    margin-bottom: 20px;
+}
+
+.file-info {
+    color: #666;
+    font-size: 0.9em;
+    margin-top: 10px;
+}
+
+.file-info-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px;
+    background: #f0f4ff;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.remove-file-btn {
+    background: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+.upload-btn {
+    margin-top: 20px;
+    padding: 12px 30px;
+    background: #1e3a8a;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    transition: background 0.3s;
+}
+
+.upload-btn:hover {
+    background: #1e40af;
+}
+
+/* 분석 버튼 */
+.analyze-btn {
+    width: 100%;
+    padding: 18px;
+    margin-top: 20px;
+    background: #1e3a8a;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.analyze-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(30, 58, 138, 0.3);
+    background: #1e40af;
+}
+
+.analyze-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 결과 섹션 */
+.result-section {
+    margin-top: 40px;
+    padding: 30px;
+    background: #f9f9f9;
+    border-radius: 15px;
+    border: 2px solid #e0e0e0;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.result-header h2 {
+    color: #333;
+    font-size: 1.8em;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 2em;
+    cursor: pointer;
+    color: #666;
+    line-height: 1;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    transition: all 0.3s;
+}
+
+.close-btn:hover {
+    background: #e0e0e0;
+    color: #333;
+}
+
+/* 위험도 평가 */
+.risk-assessment {
+    margin-bottom: 30px;
+    padding: 25px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.risk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 25px;
+    border-radius: 50px;
+    margin-bottom: 20px;
+    font-weight: 600;
+}
+
+.risk-badge.high {
+    background: #ffe0e0;
+    color: #cc0000;
+}
+
+.risk-badge.medium {
+    background: #fff4e0;
+    color: #cc8800;
+}
+
+.risk-badge.low {
+    background: #e0ffe0;
+    color: #00cc00;
+}
+
+.risk-label {
+    font-size: 1.1em;
+}
+
+.risk-value {
+    font-size: 1.5em;
+    font-weight: 700;
+}
+
+.summary {
+    font-size: 1.1em;
+    line-height: 1.8;
+    color: #555;
+}
+
+/* 조항별 분석 */
+.clauses-section h3 {
+    margin-bottom: 20px;
+    color: #333;
+    font-size: 1.5em;
+}
+
+.clause-item {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid #1e3a8a;
+}
+
+.clause-item.unfair {
+    border-left-color: #ff4444;
+}
+
+.clause-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 15px;
+}
+
+.clause-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.clause-badge.unfair {
+    background: #ffe0e0;
+    color: #cc0000;
+}
+
+.clause-badge.fair {
+    background: #e0ffe0;
+    color: #00cc00;
+}
+
+.clause-original {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-size: 0.95em;
+    line-height: 1.6;
+}
+
+.clause-analysis {
+    margin-bottom: 15px;
+}
+
+.analysis-item {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f9f9f9;
+    border-radius: 8px;
+}
+
+.analysis-label {
+    font-weight: 600;
+    color: #1e3a8a;
+    margin-bottom: 5px;
+}
+
+.analysis-content {
+    color: #555;
+    line-height: 1.6;
+}
+
+.clause-translation {
+    background: #e0e8ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border-left: 4px solid #1e3a8a;
+}
+
+.clause-translation-label {
+    font-weight: 600;
+    color: #1e3a8a;
+    margin-bottom: 8px;
+}
+
+.clause-suggestion {
+    background: #e0e8ff;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #1e3a8a;
+}
+
+.clause-suggestion-label {
+    font-weight: 600;
+    color: #1e3a8a;
+    margin-bottom: 8px;
+}
+
+.clause-law-content {
+    background: #f0f4ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border-left: 4px solid #1e3a8a;
+}
+
+.clause-law-content-label {
+    font-weight: 600;
+    color: #1e3a8a;
+    margin-bottom: 8px;
+    font-size: 1.05em;
+}
+
+.clause-law-content-text {
+    color: #333;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    font-size: 0.95em;
+}
+
+/* 로딩 오버레이 */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    color: white;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-overlay p {
+    font-size: 1.2em;
+    font-weight: 500;
+}
+
+/* 푸터 */
+footer {
+    background: #f5f5f5;
+    padding: 20px;
+    text-align: center;
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 2em;
+    }
+    
+    main {
+        padding: 20px;
+    }
+    
+    .clause-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+

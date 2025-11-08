@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# 환경 변수
+.env
+.env.local
+
+# 벡터 스토어
+vector_stores/
+*.index
+*.faiss
+
+# 데이터 (실제 데이터는 제외, 샘플만 포함)
+data/legal_docs/*.txt
+data/dictionary/*.json
+!data/legal_docs/.gitkeep
+!data/dictionary/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+
+# 임시 파일
+*.tmp
+*.temp

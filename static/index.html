@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>계약서 불공정 약관 분석</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 계약서 불공정 약관 분석</h1>
+            <p class="subtitle">RAG/LangChain 기반 계약서 분석 서비스</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="text">텍스트 입력</button>
+                    <button class="tab-btn" data-tab="file">파일 업로드</button>
+                </div>
+
+                <!-- 텍스트 입력 탭 -->
+                <div class="tab-content active" id="text-tab">
+                    <textarea 
+                        id="contract-text" 
+                        placeholder="계약서 텍스트를 입력하세요...&#10;&#10;예시:&#10;제1조 (목적) 본 계약은 서비스 이용에 관한 사항을 정함을 목적으로 한다.&#10;제2조 회사는 어떠한 경우에도 손해배상 책임을 지지 않는다."
+                        rows="10"
+                    ></textarea>
+                    <button class="analyze-btn" onclick="analyzeText()">
+                        <span class="btn-text">분석 시작</span>
+                        <span class="btn-loader" style="display: none;">분석 중...</span>
+                    </button>
+                </div>
+
+                <!-- 파일 업로드 탭 -->
+                <div class="tab-content" id="file-tab">
+                    <div class="file-upload-area" id="file-upload-area">
+                        <input type="file" id="file-input" accept=".txt,.pdf,.docx" style="display: none;">
+                        <div class="upload-icon">📄</div>
+                        <p>파일을 드래그하거나 클릭하여 업로드</p>
+                        <p class="file-info">지원 형식: TXT, PDF, DOCX</p>
+                        <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                            파일 선택
+                        </button>
+                    </div>
+                    <div id="file-info" class="file-info-display" style="display: none;">
+                        <span id="file-name"></span>
+                        <button class="remove-file-btn" onclick="removeFile()">×</button>
+                    </div>
+                    <button class="analyze-btn" id="analyze-file-btn" onclick="analyzeFile()" style="display: none;">
+                        <span class="btn-text">분석 시작</span>
+                        <span class="btn-loader" style="display: none;">분석 중...</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 결과 섹션 -->
+            <div class="result-section" id="result-section" style="display: none;">
+                <div class="result-header">
+                    <h2>분석 결과</h2>
+                    <button class="close-btn" onclick="closeResults()">×</button>
+                </div>
+
+                <!-- 전체 위험도 평가 -->
+                <div class="risk-assessment" id="risk-assessment">
+                    <div class="risk-badge" id="risk-badge">
+                        <span class="risk-label">위험도</span>
+                        <span class="risk-value" id="risk-value">-</span>
+                    </div>
+                    <div class="summary" id="summary"></div>
+                </div>
+
+                <!-- 조항별 분석 결과 -->
+                <div class="clauses-section">
+                    <h3>조항별 분석</h3>
+                    <div id="clauses-list"></div>
+                </div>
+            </div>
+
+            <!-- 로딩 오버레이 -->
+            <div class="loading-overlay" id="loading-overlay" style="display: none;">
+                <div class="spinner"></div>
+                <p>계약서를 분석하고 있습니다...</p>
+            </div>
+        </main>
+
+        <footer>
+            <p>© 계약서 불공정 약관 분석 시스템</p>
+        </footer>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
+
