@@ -1,6 +1,4 @@
-
-✅ database/graph_builder.py는 “법률 구조” (조, 항, 호 등 법 자체 구조)
-✅ pipeline/graph_builder.py는 “데이터셋 (CSV)” 기반 그래프
+위반사례 중심 그래프 (법률구조X)
 
 # Step 1: 환경 설정
 pip install -r requirements.txt
