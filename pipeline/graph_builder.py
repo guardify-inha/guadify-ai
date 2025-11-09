@@ -1,7 +1,10 @@
 """
-CSV 데이터를 진짜 GraphRAG로 변환하는 파이프라인
+CSV 데이터를 Law-Centric GraphRAG로 변환하는 파이프라인
 
-✅ NaN 처리: 필수 컬럼에 NaN이 있는 행은 아예 제외
+핵심 변경사항:
+1. Law-Centric 구조: 법률 조항(조-항-호)을 중심으로 위반사례 연결
+2. ViolationCase → 호 노드로 직접 연결 (VIOLATES 관계)
+3. LawArticle 노드 제거, 기존 law_structure의 호 노드 활용
 """
 
 import pandas as pd
@@ -14,7 +17,7 @@ from tqdm import tqdm
 import json
 
 class GraphRAGBuilder:
-    """CSV → GraphRAG 변환 빌더"""
+    """CSV → Law-Centric GraphRAG 변환 빌더"""
     
     def __init__(self, neo4j_connector, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2'):
         self.conn = neo4j_connector
@@ -41,13 +44,13 @@ class GraphRAGBuilder:
         print("\n🔗 Step 4: 유사도 관계 생성 중...")
         self._create_similarity_relationships(df, embeddings)
         
-        # Step 5: 법률 조항 관계 생성
-        print("\n⚖️ Step 5: 법률 조항 관계 생성 중...")
-        self._create_law_relationships(df)
+        # Step 5: 법률 조항 관계 생성 (Law-Centric!)
+        print("\n⚖️ Step 5: 법률 조항 관계 생성 (Law-Centric)...")
+        self._create_law_relationships_centric(df)
         
-        # Step 6: 키워드 추출 및 관계 생성
-        print("\n🔑 Step 6: 키워드 추출 중...")
-        self._extract_and_link_keywords(df)
+        # Step 6: 키워드 추출 및 관계 생성 (빈도 기반 가중치)
+        print("\n🔑 Step 6: 키워드 추출 (빈도 가중치)...")
+        self._extract_and_link_keywords_with_frequency(df)
         
         # Step 7: 위반 유형 분류
         print("\n📋 Step 7: 위반 유형 분류 중...")
@@ -83,11 +86,11 @@ class GraphRAGBuilder:
         print("\n🔗 Step 4: 유사도 관계 생성 중...")
         self._create_similarity_relationships(df_total, embeddings)
 
-        print("\n⚖️ Step 5: 법률 조항 관계 생성 중...")
-        self._create_law_relationships(df_total)
+        print("\n⚖️ Step 5: 법률 조항 관계 생성 (Law-Centric)...")
+        self._create_law_relationships_centric(df_total)
 
-        print("\n🔑 Step 6: 키워드 추출 중...")
-        self._extract_and_link_keywords(df_total)
+        print("\n🔑 Step 6: 키워드 추출 (빈도 가중치)...")
+        self._extract_and_link_keywords_with_frequency(df_total)
 
         print("\n📋 Step 7: 위반 유형 분류 중...")
         self._categorize_violations(df_total)
@@ -214,10 +217,6 @@ class GraphRAGBuilder:
                 'embedding': embedding_list
             })
         
-        # 법률 조항 노드 생성
-        print("  - LawArticle 노드 생성...")
-        self._create_law_article_nodes(df)
-        
         # 위반 유형 노드 생성
         print("  - ViolationType 노드 생성...")
         self._create_violation_type_nodes(df)
@@ -238,137 +237,305 @@ class GraphRAGBuilder:
         threshold = 0.7
         top_k = 5
         
-        relationships_created = 0
-        for i in tqdm(range(len(similarity_matrix))):
-            case_id_i = f"CASE_{df.iloc[i]['ID']}"
+        for i in tqdm(range(len(df))):
+            case_id_1 = f"CASE_{df.iloc[i]['ID']}"
             
-            # 유사도 정렬 (자기 자신 제외)
-            similarities = similarity_matrix[i]
-            similar_indices = np.argsort(similarities)[::-1][1:top_k+1]
+            # 자기 자신 제외하고 유사도 높은 top_k 찾기
+            similarities = similarity_matrix[i].copy()
+            similarities[i] = -1  # 자기 자신 제외
             
-            for j in similar_indices:
-                sim_score = similarities[j]
-                if sim_score < threshold:
+            top_indices = np.argsort(similarities)[::-1][:top_k]
+            
+            for j in top_indices:
+                if similarities[j] < threshold:
                     continue
                 
-                case_id_j = f"CASE_{df.iloc[j]['ID']}"
+                case_id_2 = f"CASE_{df.iloc[j]['ID']}"
                 
                 query = """
                 MATCH (v1:ViolationCase {id: $id1})
                 MATCH (v2:ViolationCase {id: $id2})
                 CREATE (v1)-[:SIMILAR_TO {
-                    similarity_score: $score,
-                    similarity_type: 'semantic'
+                    similarity: $similarity,
+                    method: 'cosine'
                 }]->(v2)
                 """
                 
                 self.conn.execute_query(query, {
-                    'id1': case_id_i,
-                    'id2': case_id_j,
-                    'score': float(sim_score)
+                    'id1': case_id_1,
+                    'id2': case_id_2,
+                    'similarity': float(similarities[j])
                 })
-                relationships_created += 1
-        
-        print(f"  ✅ {relationships_created}개 유사도 관계 생성 완료")
     
-    def _create_law_relationships(self, df: pd.DataFrame):
-        """법률 조항 관계 생성 (약관법만)"""
-        print("  - VIOLATES 관계 생성 중...")
+    def _create_law_relationships_centric(self, df: pd.DataFrame):
+        """
+        [Law-Centric 구조]
+        ViolationCase → 호(또는 항, 조) 노드로 직접 연결
+        
+        연결 우선순위:
+        1. 호 노드 (가장 구체적)
+        2. 항 노드 (호가 없는 경우)
+        3. 조 노드 (항도 없는 경우)
+        """
+        print("  - ViolationCase → 법률 노드 연결 (Law-Centric)...")
         
         for idx, row in tqdm(df.iterrows(), total=len(df)):
             case_id = f"CASE_{row['ID']}"
+            legal_basis = row.get('근거 조항(약관법)', '')
             
-            # 근거 조항(약관법)만 사용
-            legal_basis_col = row.get('근거 조항(약관법)', '')
-            article_id = self._extract_article_id(legal_basis_col)
-            
-            if not article_id:
+            if not legal_basis or pd.isna(legal_basis):
                 continue
             
-            query = """
-            MATCH (v:ViolationCase {id: $case_id})
-            MATCH (l:LawArticle {id: $article_id})
-            CREATE (v)-[:VIOLATES {
-                confidence: $confidence,
-                reason: $reason
-            }]->(l)
-            """
+            # 조항 파싱 (예: "제7조 제2호", "제6조 제2항 제1호")
+            parsed = self._parse_legal_article(legal_basis)
             
-            confidence = self._calculate_violation_confidence(row)
+            if not parsed['article']:
+                continue
             
-            self.conn.execute_query(query, {
-                'case_id': case_id,
-                'article_id': article_id,
-                'confidence': confidence,
-                'reason': row['시정 요청 사유'][:500]
-            })
+            # 연결 대상 노드 찾기 (우선순위: 호 > 항 > 조)
+            target_node = self._find_law_target_node(
+                parsed['article'],
+                parsed.get('hang'),
+                parsed.get('ho')
+            )
+            
+            if target_node:
+                self._create_violation_relationship(case_id, target_node)
     
-    def _extract_and_link_keywords(self, df: pd.DataFrame):
-        """키워드 추출 및 연결"""
-        keyword_patterns = {
-            '면책': r'면책|책임.*지지.*않|책임.*없',
-            '일방적_변경': r'일방적.*변경|임의.*변경',
-            '손해배상': r'손해배상|배상금|위약금',
-            '계약해지': r'해지|해제|취소',
-            '추가담보': r'추가.*담보|담보.*제공',
-            '서면제한': r'서면.*제한|서면으로.*만',
-        }
+    def _parse_legal_article(self, legal_basis: str) -> Dict:
+        """
+        법조항 문자열 파싱
         
-        # 키워드 노드 생성
-        for keyword, pattern in keyword_patterns.items():
+        예시:
+        - "제7조 제2호" → {article: "제7조", ho: "제2호"}
+        - "제6조 제2항 제1호" → {article: "제6조", hang: "제2항", ho: "제1호"}
+        - "제8조" → {article: "제8조"}
+        """
+        result = {}
+        
+        # 조 추출
+        article_match = re.search(r'제(\d+)조', legal_basis)
+        if article_match:
+            result['article'] = f"제{article_match.group(1)}조"
+        
+        # 항 추출
+        hang_match = re.search(r'제(\d+)항', legal_basis)
+        if hang_match:
+            result['hang'] = f"제{hang_match.group(1)}항"
+        
+        # 호 추출
+        ho_match = re.search(r'제(\d+)호', legal_basis)
+        if ho_match:
+            result['ho'] = f"제{ho_match.group(1)}호"
+        
+        return result
+    
+    def _find_law_target_node(self, article_id: str, hang_id: str = None, ho_id: str = None) -> Dict:
+        """
+        법률 노드 찾기 (우선순위: 호 > 항 > 조)
+        
+        Returns:
+            {'type': 'ho'|'항'|'조', 'id': node_id}
+        """
+        # 1순위: 호 노드 찾기
+        if ho_id:
+            if hang_id:
+                # 제6조 제2항 제1호 형식
+                ho_full_id = f"{article_id}_{hang_id}_{ho_id}"
+            else:
+                # 제7조 제2호 형식
+                ho_full_id = f"{article_id}_{ho_id}"
+            
             query = """
-            CREATE (k:Keyword {
-                text: $text,
-                type: 'pattern',
-                regex_pattern: $pattern,
-                weight: 1.0
-            })
+            MATCH (ho:호 {id: $ho_id})
+            RETURN ho.id as id
+            LIMIT 1
             """
+            result = self.conn.execute_query(query, {'ho_id': ho_full_id})
+            
+            if result:
+                return {'type': '호', 'id': result[0]['id']}
+        
+        # 2순위: 항 노드 찾기
+        if hang_id:
+            hang_full_id = f"{article_id}_{hang_id}"
+            
+            query = """
+            MATCH (hang:항 {id: $hang_id})
+            RETURN hang.id as id
+            LIMIT 1
+            """
+            result = self.conn.execute_query(query, {'hang_id': hang_full_id})
+            
+            if result:
+                return {'type': '항', 'id': result[0]['id']}
+        
+        # 3순위: 조 노드 찾기
+        query = """
+        MATCH (article:조 {id: $article_id})
+        RETURN article.id as id
+        LIMIT 1
+        """
+        result = self.conn.execute_query(query, {'article_id': article_id})
+        
+        if result:
+            return {'type': '조', 'id': result[0]['id']}
+        
+        return None
+    
+    def _create_violation_relationship(self, case_id: str, target_node: Dict):
+        """ViolationCase → 법률 노드 관계 생성"""
+        node_type = target_node['type']
+        node_id = target_node['id']
+        
+        query = f"""
+        MATCH (v:ViolationCase {{id: $case_id}})
+        MATCH (law:{node_type} {{id: $node_id}})
+        CREATE (v)-[:VIOLATES {{
+            confidence: 1.0,
+            method: 'law_centric'
+        }}]->(law)
+        """
+        
+        self.conn.execute_query(query, {
+            'case_id': case_id,
+            'node_id': node_id
+        })
+    
+    def _extract_and_link_keywords_with_frequency(self, df: pd.DataFrame):
+        """
+        키워드 추출 및 관계 생성 (빈도 기반 가중치)
+        
+        개선사항:
+        - 키워드 빈도를 계산하여 가중치 부여
+        - 자주 나타나는 키워드는 더 높은 위험도
+        """
+        print("  - 키워드 추출 및 빈도 계산...")
+        
+        # 전체 텍스트에서 키워드 빈도 계산
+        keyword_frequency = {}
+        all_keywords = set()
+        
+        for idx, row in df.iterrows():
+            text = row['불공정 약관 원문']
+            reason = row['시정 요청 사유']
+            
+            keywords = self._extract_keywords(text, reason)
+            
+            for kw in keywords:
+                all_keywords.add(kw)
+                keyword_frequency[kw] = keyword_frequency.get(kw, 0) + 1
+        
+        # 빈도 기준 상위 키워드만 노드로 생성
+        print("  - Keyword 노드 생성 (빈도 기반)...")
+        min_frequency = 2  # 최소 2회 이상 출현한 키워드만
+        
+        for kw, freq in keyword_frequency.items():
+            if freq < min_frequency:
+                continue
+            
+            # 빈도에 따른 중요도 점수
+            importance = min(freq / 10.0, 1.0)
+            
+            query = """
+            MERGE (k:Keyword {text: $keyword})
+            ON CREATE SET
+                k.id = $id,
+                k.frequency = $frequency,
+                k.importance = $importance,
+                k.risk_level = $risk_level
+            """
+            
             self.conn.execute_query(query, {
-                'text': keyword,
-                'pattern': pattern
+                'keyword': kw,
+                'id': f"KW_{kw}",
+                'frequency': freq,
+                'importance': importance,
+                'risk_level': self._determine_keyword_risk(kw, freq)
             })
         
-        # 키워드-사례 연결
-        print("  - CONTAINS 관계 생성 중...")
+        # ViolationCase → Keyword 관계 생성 (빈도 가중치 포함)
+        print("  - CONTAINS 관계 생성 (빈도 가중치)...")
+        
         for idx, row in tqdm(df.iterrows(), total=len(df)):
             case_id = f"CASE_{row['ID']}"
             text = row['불공정 약관 원문']
+            reason = row['시정 요청 사유']
             
-            for keyword, pattern in keyword_patterns.items():
-                matches = list(re.finditer(pattern, text))
-                if matches:
-                    query = """
-                    MATCH (v:ViolationCase {id: $case_id})
-                    MATCH (k:Keyword {text: $keyword})
-                    CREATE (v)-[:CONTAINS {
-                        count: $count,
-                        positions: $positions
-                    }]->(k)
-                    """
-                    
-                    positions = [m.start() for m in matches]
-                    self.conn.execute_query(query, {
-                        'case_id': case_id,
-                        'keyword': keyword,
-                        'count': len(matches),
-                        'positions': positions
-                    })
+            keywords = self._extract_keywords(text, reason)
+            
+            for kw in keywords:
+                if keyword_frequency.get(kw, 0) < min_frequency:
+                    continue
+                
+                # 빈도에 따른 가중치
+                weight = keyword_frequency[kw] / max(keyword_frequency.values())
+                
+                query = """
+                MATCH (v:ViolationCase {id: $case_id})
+                MATCH (k:Keyword {text: $keyword})
+                CREATE (v)-[:CONTAINS {
+                    weight: $weight,
+                    frequency_score: $frequency
+                }]->(k)
+                """
+                
+                self.conn.execute_query(query, {
+                    'case_id': case_id,
+                    'keyword': kw,
+                    'weight': weight,
+                    'frequency': keyword_frequency[kw]
+                })
+    
+    def _determine_keyword_risk(self, keyword: str, frequency: int) -> str:
+        """
+        키워드 위험도 판단 (빈도 고려)
+        """
+        high_risk_keywords = [
+            '어떠한 경우에도', '일체', '책임지지 않', '면책', '부당하게',
+            '과도한', '부담', '권리행사', '제한', '포기'
+        ]
+        
+        medium_risk_keywords = [
+            '책임', '손해배상', '불가항력', '해제', '해지', '변경'
+        ]
+        
+        # 빈도가 높으면 위험도 상승
+        if frequency >= 10:
+            if any(hrk in keyword for hrk in high_risk_keywords):
+                return 'critical'
+            elif any(mrk in keyword for mrk in medium_risk_keywords):
+                return 'high'
+            else:
+                return 'medium'
+        elif frequency >= 5:
+            if any(hrk in keyword for hrk in high_risk_keywords):
+                return 'high'
+            elif any(mrk in keyword for mrk in medium_risk_keywords):
+                return 'medium'
+            else:
+                return 'low'
+        else:
+            if any(hrk in keyword for hrk in high_risk_keywords):
+                return 'medium'
+            else:
+                return 'low'
     
     def _categorize_violations(self, df: pd.DataFrame):
-        """위반 유형 자동 분류"""
-        print("  - CATEGORIZED_AS 관계 생성 중...")
+        """위반 유형별 분류"""
+        print("  - ViolationType 관계 생성...")
         
         for idx, row in tqdm(df.iterrows(), total=len(df)):
             case_id = f"CASE_{row['ID']}"
             violation_type = row['대주제']
             
+            if pd.isna(violation_type):
+                continue
+            
             query = """
             MATCH (v:ViolationCase {id: $case_id})
             MATCH (t:ViolationType {name: $type_name})
-            CREATE (v)-[:CATEGORIZED_AS {
-                confidence: 1.0
-            }]->(t)
+            CREATE (v)-[:CLASSIFIED_AS]->(t)
             """
             
             self.conn.execute_query(query, {
@@ -429,44 +596,24 @@ class GraphRAGBuilder:
             return f"제{match.group(1)}조"
         return None
     
-    def _calculate_violation_confidence(self, row: pd.Series) -> float:
-        """위반 확신도 계산"""
-        reason = row['시정 요청 사유']
-        if pd.isna(reason):
-            return 0.5
+    def _extract_keywords(self, text: str, reason: str) -> List[str]:
+        """키워드 추출"""
+        keywords = set()
         
-        strong_words = ['명백', '분명', '확실', '부당하게']
-        confidence = 0.7
+        # 위험 패턴
+        risk_patterns = [
+            '어떠한 경우에도', '일체', '책임지지 않', '면책',
+            '부당하게', '과도한', '불가항력', '해제', '해지',
+            '변경', '손해배상', '제한', '포기', '권리행사'
+        ]
         
-        for word in strong_words:
-            if word in str(reason):
-                confidence += 0.1
+        combined_text = f"{text} {reason}"
         
-        return min(confidence, 1.0)
-    
-    def _create_law_article_nodes(self, df: pd.DataFrame):
-        """법률 조항 노드 생성 (약관법만)"""
-        articles = set()
+        for pattern in risk_patterns:
+            if pattern in combined_text:
+                keywords.add(pattern)
         
-        if '근거 조항(약관법)' in df.columns:
-            for legal_basis in df['근거 조항(약관법)'].dropna():
-                article_id = self._extract_article_id(legal_basis)
-                if article_id:
-                    articles.add(article_id)
-        
-        for article_id in articles:
-            query = """
-            MERGE (l:LawArticle {id: $id})
-            ON CREATE SET 
-                l.title = $id,
-                l.category = $category
-            """
-            
-            category = self._determine_article_category(article_id)
-            self.conn.execute_query(query, {
-                'id': article_id,
-                'category': category
-            })
+        return list(keywords)
     
     def _create_violation_type_nodes(self, df: pd.DataFrame):
         """위반 유형 노드 생성"""
@@ -531,21 +678,6 @@ class GraphRAGBuilder:
                     'year': str(self._extract_year(row['파일명']))
                 })
     
-    def _determine_article_category(self, article_id: str) -> str:
-        """조항 ID로부터 카테고리 판단"""
-        article_categories = {
-            '제6조': '부당조항',
-            '제7조': '면책조항',
-            '제8조': '손해배상',
-            '제9조': '계약해지',
-            '제10조': '급부변경',
-            '제11조': '항변권제한',
-            '제12조': '의사표시',
-            '제13조': '대리인책임',
-            '제14조': '재판관할'
-        }
-        return article_categories.get(article_id, '기타')
-    
     def _determine_industry(self, company: str) -> str:
         """회사명으로부터 업종 판단"""
         if pd.isna(company):
@@ -567,7 +699,6 @@ class GraphRAGBuilder:
         """그래프 통계 출력"""
         queries = {
             "ViolationCase": "MATCH (n:ViolationCase) RETURN count(n) as count",
-            "LawArticle": "MATCH (n:LawArticle) RETURN count(n) as count",
             "ViolationType": "MATCH (n:ViolationType) RETURN count(n) as count",
             "Company": "MATCH (n:Company) RETURN count(n) as count",
             "Keyword": "MATCH (n:Keyword) RETURN count(n) as count",
@@ -577,7 +708,7 @@ class GraphRAGBuilder:
         }
         
         print("\n" + "="*50)
-        print("📊 그래프 통계")
+        print("📊 그래프 통계 (Law-Centric)")
         print("="*50)
         
         for name, query in queries.items():
@@ -597,9 +728,6 @@ if __name__ == "__main__":
     
     conn = Neo4jConnector()
     builder = GraphRAGBuilder(conn)
-    
-    # 단일 CSV
-    # builder.build_from_csv("data/contracts/reference/corrected_terms.csv")
     
     # 여러 CSV
     builder.build_from_multiple_csv([
