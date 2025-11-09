@@ -188,8 +188,12 @@ if analyze_button and user_input.strip():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.markdown("**가장 유사한 사례**")
-                    st.info(f"**ID:** {evidence['best_match_id']}\n\n**유사도:** {evidence['similarity']:.3f}")
+                    if result['violation']:
+                        st.markdown("**가장 유사한 불공정 사례**")
+                        st.info(f"**ID:** {evidence['best_match_id']}\n\n**불공정 유사도:** {evidence['unfair_similarity']:.3f}")
+                    else:
+                        st.markdown("**가장 유사한 공정 사례**")
+                        st.info(f"**ID:** {evidence['best_match_id']}\n\n**공정 유사도:** {evidence['fair_similarity']:.3f}")
                 
                 with col2:
                     st.markdown("**위반 조항**")
