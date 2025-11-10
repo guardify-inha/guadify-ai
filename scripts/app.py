@@ -31,7 +31,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- [수정된 부분 1] ---
 # 전역 초기화 (캐싱)
 @st.cache_resource
 def get_judge():
@@ -40,18 +39,11 @@ def get_judge():
     print("--- [Cache Miss] 🚀 GraphRAG 시스템 초기화를 시작합니다... ---")
     
     try:
-        # 1. 커넥터 생성 (이 객체가 내부에 driver를 생성)
         conn = Neo4jConnector()
-        
-        # 2. [수정] HybridGraphRAG에 driver와 함께 연결 정보도 전달
-        from config.settings import settings
         
         rag = HybridGraphRAG(
             driver=conn.driver,
-            openai_api_key=os.getenv('OPENAI_API_KEY', ''),
-            neo4j_uri=settings.NEO4J_URI,
-            neo4j_user=settings.NEO4J_USER,
-            neo4j_password=settings.NEO4J_PASSWORD
+            openai_api_key=os.getenv('OPENAI_API_KEY', '')
         )
         
         return GraphRAGJudge(rag, conn)
@@ -59,6 +51,7 @@ def get_judge():
     except Exception as e:
         st.error(f"❌ GraphRAG 초기화 실패: {e}")
         st.stop()
+
 # UI 시작
 st.title("⚖️ GraphRAG 기반 불공정 약관 판단 시스템")
 
@@ -101,10 +94,7 @@ with st.sidebar:
 if analyze_button and user_input.strip():
     with st.spinner("🧠 GraphRAG로 다단계 분석 중..."):
         try:
-            # --- [수정된 부분 2] ---
-            # GraphRAG Judge 가져오기 (불필요한 'conn' 변수 제거)
             judge = get_judge()
-            # --- [수정 종료 2] ---
             
             # 판단 실행
             result = judge.judge_clause(user_input)
@@ -126,6 +116,7 @@ if analyze_button and user_input.strip():
             
             with col3:
                 severity_emoji = {
+                    'critical': '🔴',
                     'high': '🔴',
                     'medium': '🟡',
                     'low': '🟢',
@@ -133,6 +124,10 @@ if analyze_button and user_input.strip():
                 }
                 severity_display = f"{severity_emoji.get(result['severity'], '⚪')} {result['severity'].upper()}"
                 st.metric("심각도", severity_display)
+            
+            # ✅ [신규] 표현 추가
+            if 'confidence_expression' in result:
+                st.info(f"💬 {result['confidence_expression']}")
             
             # === 그래프 분석 정보 ===
             if show_graph and 'graph_context' in result:
@@ -145,11 +140,26 @@ if analyze_button and user_input.strip():
                     st.markdown("**🔗 연결된 노드**")
                     graph_ctx = result['graph_context']
                     
+                    # ✅ [수정] 키워드 오류 수정
+                    keywords = graph_ctx.get('keywords', [])
+                    if keywords:
+                        keyword_texts = []
+                        for kw in keywords[:5]:
+                            if isinstance(kw, dict):
+                                text = kw.get('text', '')
+                                case_count = kw.get('case_count', 0)
+                                keyword_texts.append(f"{text}({case_count}개)")
+                            else:
+                                keyword_texts.append(str(kw))
+                        keyword_display = ", ".join(keyword_texts)
+                    else:
+                        keyword_display = "없음"
+                    
                     node_info = {
-                        "유사 사례": graph_ctx['similar_cases_count'],
-                        "관련 법조항": ", ".join(graph_ctx['related_laws']) if graph_ctx['related_laws'] else "없음",
-                        "공통 키워드": ", ".join(graph_ctx['keywords'][:5]) if graph_ctx['keywords'] else "없음",
-                        "그래프 중심성": f"{graph_ctx['centrality_score']:.3f}"
+                        "유사 사례": graph_ctx.get('similar_cases_count', 0),
+                        "관련 법조항": ", ".join(graph_ctx.get('related_laws', [])) if graph_ctx.get('related_laws') else "없음",
+                        "공통 키워드": keyword_display,
+                        "그래프 중심성": f"{graph_ctx.get('centrality_score', 0):.3f}"
                     }
                     
                     for key, value in node_info.items():
@@ -161,22 +171,28 @@ if analyze_button and user_input.strip():
                         patterns = result['patterns']
                         
                         pattern_info = {
-                            "패턴 강도": f"{patterns['strength']:.1%}",
+                            "패턴 강도": f"{patterns.get('strength', 0):.1%}",
                             "패턴 일관성": f"{patterns.get('pattern_consistency', 0):.1%}",
                         }
                         
                         for key, value in pattern_info.items():
                             st.metric(key, value)
                         
-                        if patterns['common_keywords']:
+                        # ✅ [수정] 상위 키워드 표시
+                        top_keywords = patterns.get('top_keywords', [])
+                        if top_keywords:
+                            st.markdown("**상위 키워드:**")
+                            for kw, count in top_keywords[:3]:
+                                st.caption(f"• {kw}: {count}개 사례")
+                        
+                        # 공통 패턴
+                        if patterns.get('common_keywords'):
                             st.markdown("**공통 패턴:**")
-                            # st.badge는 최신 Streamlit 버전에만 있습니다.
-                            # 없는 경우 st.markdown 등으로 대체할 수 있습니다.
                             try:
-                                for kw in patterns['common_keywords']:
-                                    st.badge(kw)  # type 파라미터 제거
-                            except (AttributeError, TypeError):  # TypeError도 추가
-                                st.write(", ".join(patterns['common_keywords']))
+                                for kw in patterns['common_keywords'][:5]:
+                                    st.badge(kw)
+                            except (AttributeError, TypeError):
+                                st.write(", ".join(patterns['common_keywords'][:5]))
             
             # === 주요 근거 ===
             st.markdown("---")
@@ -190,51 +206,77 @@ if analyze_button and user_input.strip():
                 with col1:
                     if result['violation']:
                         st.markdown("**가장 유사한 불공정 사례**")
-                        st.info(f"**ID:** {evidence['best_match_id']}\n\n**불공정 유사도:** {evidence['unfair_similarity']:.3f}")
+                        unfair_sim = evidence.get('unfair_similarity', 0)
+                        st.info(f"**ID:** {evidence.get('best_match_id', 'N/A')}\n\n**불공정 유사도:** {unfair_sim:.3f}")
+                        
+                        # ✅ [신규] 공정 유사도도 표시
+                        fair_sim = evidence.get('fair_similarity', 0)
+                        if fair_sim > 0:
+                            st.caption(f"공정 유사도: {fair_sim:.3f}")
                     else:
                         st.markdown("**가장 유사한 공정 사례**")
-                        st.info(f"**ID:** {evidence['best_match_id']}\n\n**공정 유사도:** {evidence['fair_similarity']:.3f}")
+                        fair_sim = evidence.get('fair_similarity', 0)
+                        st.info(f"**ID:** {evidence.get('best_match_id', 'N/A')}\n\n**공정 유사도:** {fair_sim:.3f}")
                 
                 with col2:
                     st.markdown("**위반 조항**")
                     article = evidence.get('article_id', '없음')
                     st.warning(f"**약관법 {article}**")
+                    
+                    # ✅ [신규] 법률 구조 정보
+                    if 'law_structure' in result:
+                        law_info = result['law_structure']
+                        full_path = law_info.get('full_path', '')
+                        if full_path and full_path != 'Unknown':
+                            st.caption(f"상세: {full_path}")
+            
+            # ✅ [신규] LLM 판단 정보 (접기)
+            if 'llm_judgment' in result:
+                with st.expander("🤖 LLM 판단 상세", expanded=False):
+                    llm_judgment = result['llm_judgment']
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.metric("수식 점수", f"{llm_judgment.get('formula_score', 0):.3f}")
+                    
+                    with col2:
+                        st.metric("LLM 조정 점수", f"{llm_judgment.get('adjusted_score', 0):.3f}")
+                    
+                    reasoning = llm_judgment.get('reasoning', '')
+                    if reasoning:
+                        st.markdown("**추론:**")
+                        st.write(reasoning)
             
             # === 상세 설명 ===
             st.markdown("---")
             st.subheader("📝 상세 설명")
-            st.write(result['explanation'])
+            st.write(result.get('explanation', ''))
             
             # === 수정 제안 ===
             if result['violation']:
                 st.markdown("---")
                 st.subheader("💡 수정 제안")
-                st.info(result['suggestion'])
+                st.info(result.get('suggestion', ''))
             
             # === 유사 사례 ===
             st.markdown("---")
             with st.expander("🔗 유사 사례 보기 (GraphRAG 검색 결과)", expanded=False):
-                for i, case in enumerate(result['top_similar_cases'], 1):
-                    st.markdown(f"**{i}. 유사도: {case['similarity']:.3f}** (ID: `{case['id']}`)")
-                    
-                    # 텍스트 미리보기
-                    preview = case['text'][:300] + "..." if len(case['text']) > 300 else case['text']
-                    st.text(preview)
-                    
-                    if i < len(result['top_similar_cases']):
-                        st.divider()
-            
-            # === 추론 경로 ===
-            if show_graph and 'reasoning_paths' in result and result['reasoning_paths'] > 0:
-                with st.expander(f"🧠 추론 경로 ({result['reasoning_paths']}개 경로 탐색)", expanded=False):
-                    st.markdown("""
-                    다단계 그래프 탐색을 통해 연관 사례들의 네트워크를 발견했습니다.
-                    
-                    **탐색 방식:**
-                    - 1단계: 벡터 유사도 검색으로 초기 사례 발견
-                    - 2단계: 그래프 관계(SIMILAR_TO)를 따라 확장 탐색
-                    - 3단계: 법조항(VIOLATES) 관계로 근거 강화
-                    """)
+                top_cases = result.get('top_similar_cases', [])
+                
+                if top_cases:
+                    for i, case in enumerate(top_cases, 1):
+                        st.markdown(f"**{i}. 유사도: {case.get('similarity', 0):.3f}** (ID: `{case.get('id', 'N/A')}`)")
+                        
+                        # 텍스트 미리보기
+                        text = case.get('text', '')
+                        preview = text[:300] + "..." if len(text) > 300 else text
+                        st.text(preview)
+                        
+                        if i < len(top_cases):
+                            st.divider()
+                else:
+                    st.caption("유사 사례 없음")
             
             # === Raw JSON ===
             if show_raw:
