@@ -7,13 +7,12 @@
         "keywords": [
           "부당",
           "불리",
-          "고객이 부담",
-          "무조건"
+          "고객",
+          "부담"
         ],
         "high_risk_keywords": [
           "고객이 부담",
           "고객의 부담으로",
-          "무조건",
           "전적으로 고객이"
         ],
         "description": "고객에게 부당하게 불리한 표현",
@@ -23,17 +22,23 @@
         "keywords": [
           "본질적",
           "권리",
-          "제한",
-          "무조건"
+          "제한"
         ],
         "high_risk_keywords": [
-          "무조건",
           "일체",
           "포기",
           "행사할 수 없"
         ],
         "description": "본질적 권리 제한",
         "risk_level": "critical"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "고객부담패턴",
+        "regex": "고객[이가]?\\s*부담",
+        "keyword": "고객이 부담",
+        "risk_level": "high"
       }
     ]
   },
@@ -47,36 +52,52 @@
           "중과실",
           "책임",
           "배제",
-          "면책",
-          "무조건"
+          "면책"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "어떠한 경우에도",
-          "어떠한 사유로도",
-          "어떠한 사유라도",
-          "일체",
-          "전부",
           "책임지지 않는다",
+          "책임 지지 않",
+          "책임을 부담하지 않",
+          "책임이 없다",
           "피해배상도 하지않는다",
-          "손해를 배상하지"
+          "손해를 배상하지",
+          "배상하지 않는다"
         ],
         "description": "고의·중과실 면책 조항",
-        "risk_level": "critical"
+        "risk_level": "high"
       },
       {
         "keywords": [
           "담보",
           "책임",
-          "배제",
-          "무조건"
+          "배제"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "일체의 책임을 지지 않",
-          "책임 없음"
+          "담보책임 없음",
+          "담보하지 않",
+          "일체의 담보책임을 지지 않"
         ],
         "description": "담보책임 배제",
+        "risk_level": "high"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "책임면제패턴",
+        "regex": "(책임(을|을\\s*지|을\\s*부담)?(지지\\s*않|부담하지\\s*않|없|면제|제한|배제)|책임이\\s*(없|면제|제한|배제)|책임에서\\s*(면하|제외)|책임을\\s*지지\\s*않습니다|책임지지\\s*않|책임이\\s*없습니다)",
+        "keyword": "책임 회피/면제",
+        "risk_level": "high"
+      },
+      {
+        "name": "배상거부패턴",
+        "regex": "(손해(에\\s*대한)?\\s*배상(을|의)?\\s*(지지\\s*않|하지\\s*않|책임이\\s*없|책임지지\\s*않)|손해배상\\s*(의무|책임)?\\s*(이\\s*없|을\\s*지지\\s*않)|피해에\\s*대한\\s*배상(을|은)?\\s*(하지\\s*않|면제))",
+        "keyword": "손해배상 거부",
+        "risk_level": "high"
+      },
+      {
+        "name": "면책패턴",
+        "regex": "면책(된다|한다|됨)",
+        "keyword": "면책",
         "risk_level": "high"
       }
     ]
@@ -95,15 +116,12 @@
         ],
         "high_risk_keywords": [
           "지연 손해금",
-          "연체 이율",
-          "위약금",
-          "배상액을 예정",
+          "부당하게 과중한",
           "법정이율을 초과",
-          "과도한 배상",
-          "부당하게 과중한"
+          "과도한 배상"
         ],
         "description": "부당하게 과중한 손해배상액 예정",
-        "risk_level": "critical"
+        "risk_level": "high"
       },
       {
         "keywords": [
@@ -113,8 +131,6 @@
           "과다"
         ],
         "high_risk_keywords": [
-          "위약금",
-          "해약금",
           "계약금 전액 몰수",
           "과다한 위약금",
           "부당한 해약금"
@@ -131,12 +147,25 @@
         ],
         "high_risk_keywords": [
           "연체 이자율",
-          "가산 이자",
           "고율의 이자",
           "법정 최고이율 초과",
           "과도한 연체료"
         ],
         "description": "과도한 연체이자 또는 이율",
+        "risk_level": "high"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "위약금패턴",
+        "regex": "위약금|해약금|손해배상액",
+        "keyword": "위약금",
+        "risk_level": "medium"
+      },
+      {
+        "name": "과다배상패턴",
+        "regex": "(과다|과중|과도)(한)?\\s*(위약금|배상|손해배상)",
+        "keyword": "과다한 배상액",
         "risk_level": "high"
       }
     ]
@@ -150,16 +179,13 @@
           "해제",
           "해지",
           "배제",
-          "제한",
-          "무조건",
-          "즉시"
+          "제한"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "즉시",
-          "별도 통지 없이",
-          "일방적으로",
-          "사전 통지 없이"
+          "해제할 수 없",
+          "해지할 수 없",
+          "해제권 없음",
+          "해지권 배제"
         ],
         "description": "해제·해지권 배제/제한",
         "risk_level": "critical"
@@ -167,16 +193,13 @@
       {
         "keywords": [
           "존속기간",
-          "부당",
           "자동연장",
-          "자동갱신",
-          "무조건"
+          "자동갱신"
         ],
         "high_risk_keywords": [
           "자동연장",
           "자동갱신",
-          "무조건",
-          "별도 통지 없이"
+          "자동으로 연장"
         ],
         "description": "부당한 존속기간 및 자동갱신",
         "risk_level": "medium"
@@ -202,6 +225,26 @@
         "description": "청약철회 및 환불 권리 제한",
         "risk_level": "critical"
       }
+    ],
+    "regex_patterns": [
+      {
+        "name": "환불불가패턴",
+        "regex": "환불[이은]?\\s*(불가|거부|불가능|안\\s*됨|되지\\s*않|받을\\s*수\\s*없)",
+        "keyword": "환불 불가",
+        "risk_level": "critical"
+      },
+      {
+        "name": "반환불가패턴",
+        "regex": "반환[이되]?\\s*(불가|되지\\s*않|안\\s*됨)",
+        "keyword": "반환 불가",
+        "risk_level": "critical"
+      },
+      {
+        "name": "자동연장패턴",
+        "regex": "자동(으로)?\\s*(연장|갱신)",
+        "keyword": "자동연장",
+        "risk_level": "medium"
+      }
     ]
   },
   "제10조": {
@@ -212,14 +255,10 @@
         "keywords": [
           "일방적",
           "결정",
-          "변경",
-          "무조건",
-          "별도 통지 없이"
+          "변경"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "별도 통지 없이",
-          "사전 통지 없이",
+          "일방적으로 결정",
           "임의로",
           "단독으로"
         ],
@@ -230,19 +269,23 @@
         "keywords": [
           "이행",
           "중지",
-          "일방적",
-          "무조건",
-          "별도 통지 없이"
+          "일방적"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "별도 통지 없이",
           "즉시",
-          "통지 없이",
-          "사전 고지없이"
+          "이행을 중지",
+          "서비스 중단"
         ],
         "description": "급부 이행의 일방적 중지",
-        "risk_level": "critical"
+        "risk_level": "high"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "일방적변경패턴",
+        "regex": "일방적(으로)?\\s*(변경|결정|수정)",
+        "keyword": "일방적 변경",
+        "risk_level": "high"
       }
     ]
   },
@@ -255,18 +298,13 @@
           "기한",
           "이익",
           "박탈",
-          "즉시",
-          "무조건",
-          "별도 통지 없이",
-          "즉시 채무 변제"
+          "상실"
         ],
         "high_risk_keywords": [
           "즉시 채무 변제",
           "즉시 상환",
-          "무조건",
-          "별도 통지 없이",
-          "당연히 상실",
-          "기한의 이익 상실"
+          "기한의 이익 상실",
+          "당연히 상실"
         ],
         "description": "기한의 이익 박탈",
         "risk_level": "critical"
@@ -287,6 +325,20 @@
         "description": "손해배상 청구권 제한",
         "risk_level": "critical"
       }
+    ],
+    "regex_patterns": [
+      {
+        "name": "기한이익상실패턴",
+        "regex": "기한(의)?\\s*이익\\s*(상실|박탈)",
+        "keyword": "기한의 이익 상실",
+        "risk_level": "critical"
+      },
+      {
+        "name": "즉시변제패턴",
+        "regex": "즉시\\s*(채무)?\\s*(변제|상환)",
+        "keyword": "즉시 채무 변제",
+        "risk_level": "critical"
+      }
     ]
   },
   "제12조": {
@@ -297,12 +349,9 @@
         "keywords": [
           "의사표시",
           "간주",
-          "의제",
-          "무조건"
+          "의제"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "자동",
           "간주한다",
           "동의한 것으로 본다",
           "승낙한 것으로 간주"
@@ -313,29 +362,13 @@
       {
         "keywords": [
           "서면",
-          "제한",
-          "서면으로만",
-          "서면통지",
-          "반드시 서면으로",
-          "무조건"
+          "제한"
         ],
         "high_risk_keywords": [
           "서면으로만",
           "반드시 서면으로",
           "서면에 한하여",
-          "무조건",
           "서면 통지에 한함"
-        ],
-        "combined_high_risk": [
-          {
-            "condition": "서면 제한 + 자동연장",
-            "keywords": [
-              "서면으로만",
-              "자동연장"
-            ],
-            "risk_level": "critical",
-            "description": "서면 제한과 자동연장이 함께 있는 경우 고객의 의사표시가 극도로 제한됨"
-          }
         ],
         "description": "서면으로만 제한",
         "risk_level": "high"
@@ -344,19 +377,28 @@
         "keywords": [
           "통지",
           "도달",
-          "간주",
-          "무조건",
-          "별도 통지 없이"
+          "간주"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "별도 통지 없이",
-          "자동으로 도달",
           "도달한 것으로 간주",
           "통지한 것으로 본다"
         ],
         "description": "통지 도달 간주",
         "risk_level": "medium"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "의제패턴",
+        "regex": "(간주|의제|본다|것으로\\s*한다)",
+        "keyword": "의사표시 의제",
+        "risk_level": "medium"
+      },
+      {
+        "name": "서면제한패턴",
+        "regex": "서면(으로)?\\s*(만|에\\s*한하여)",
+        "keyword": "서면으로만",
+        "risk_level": "high"
       }
     ]
   },
@@ -414,6 +456,14 @@
         "description": "대리인에게 손해배상 또는 위약금 책임 부과",
         "risk_level": "high"
       }
+    ],
+    "regex_patterns": [
+      {
+        "name": "대리인책임패턴",
+        "regex": "대리인[이도]?\\s*(책임|부담|이행|변제|배상)",
+        "keyword": "대리인 책임 전가",
+        "risk_level": "critical"
+      }
     ]
   },
   "제14조": {
@@ -423,11 +473,9 @@
       {
         "keywords": [
           "소송",
-          "금지",
-          "무조건"
+          "금지"
         ],
         "high_risk_keywords": [
-          "무조건",
           "소송 제기 불가",
           "제기할 수 없",
           "소송을 제기하지 않는다",
@@ -440,18 +488,22 @@
         "keywords": [
           "관할",
           "불리",
-          "무조건",
           "전속"
         ],
         "high_risk_keywords": [
-          "무조건",
-          "전속",
-          "오직",
           "전속관할",
           "본사 소재지 관할"
         ],
         "description": "불리한 재판관할 합의",
         "risk_level": "medium"
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "소송금지패턴",
+        "regex": "소송\\s*(제기)?\\s*(불가|금지|할\\s*수\\s*없|하지\\s*않)",
+        "keyword": "소송 금지",
+        "risk_level": "critical"
       }
     ]
   },
@@ -459,39 +511,9 @@
     "description": "모든 조항에 걸쳐 위험한 범용 키워드",
     "keywords": [
       {
-        "keyword": "피해배상도 하지않는다",
-        "risk_level": "critical",
-        "description": "사업자가 모든 손해에 대해 배상을 거부하는 조항"
-      },
-      {
-        "keyword": "어떠한 피해배상도",
-        "risk_level": "critical",
-        "description": "사업자가 모든 손해에 대해 배상을 거부하는 조항"
-      },
-      {
-        "keyword": "손해를 배상하지",
-        "risk_level": "critical",
-        "description": "사업자의 배상 책임을 거부하는 조항"
-      },
-      {
-        "keyword": "책임지지 않는다",
-        "risk_level": "critical",
-        "description": "사업자의 책임을 포괄적으로 면제하는 조항"
-      },
-      {
-        "keyword": "면책된다",
-        "risk_level": "high",
-        "description": "사업자의 책임을 면제하는 조항"
-      },
-      {
         "keyword": "무조건",
         "risk_level": "high",
         "description": "절대적이고 예외 없는 조건은 고객에게 불리"
-      },
-      {
-        "keyword": "고객이 부담",
-        "risk_level": "high",
-        "description": "위험이나 비용을 고객에게 전가"
       },
       {
         "keyword": "별도 통지 없이",
@@ -502,11 +524,6 @@
         "keyword": "사전 통지 없이",
         "risk_level": "high",
         "description": "고객의 알 권리 침해"
-      },
-      {
-        "keyword": "즉시 채무 변제",
-        "risk_level": "critical",
-        "description": "기한의 이익 즉시 박탈"
       },
       {
         "keyword": "즉시",
@@ -535,6 +552,16 @@
         "description": "절대적 면책 또는 제한"
       },
       {
+        "keyword": "어떠한 사유로도",
+        "risk_level": "high",
+        "description": "절대적 면책 또는 제한"
+      },
+      {
+        "keyword": "어떠한 사유라도",
+        "risk_level": "high",
+        "description": "절대적 면책 또는 제한"
+      },
+      {
         "keyword": "자동",
         "risk_level": "medium",
         "description": "고객의 명시적 의사 없이 진행",
@@ -548,72 +575,66 @@
             "risk_level": "high"
           }
         ]
+      }
+    ],
+    "regex_patterns": [
+      {
+        "name": "무조건패턴",
+        "regex": "무조건",
+        "keyword": "무조건",
+        "risk_level": "high"
       },
       {
-        "keyword": "환불이 불가",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
+        "name": "통지없음패턴",
+        "regex": "(별도|사전)\\s*통지\\s*없이",
+        "keyword": "통지 없이",
+        "risk_level": "high"
       },
       {
-        "keyword": "환불 불가",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
-      },
-      {
-        "keyword": "환불은 불가",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
-      },
-      {
-        "keyword": "환불 불가능",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
-      },
-      {
-        "keyword": "환불이 불가능",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
-      },
-      {
-        "keyword": "환불은 불가능",
-        "risk_level": "critical",
-        "description": "고객의 정당한 환불/청약철회 권리를 포괄적으로 금지"
-      },
-      {
-        "keyword": "환불되지 않",
-        "risk_level": "critical",
-        "description": "환불 권리를 배제하는 조항"
-      },
-      {
-        "keyword": "반환되지 않",
-        "risk_level": "critical",
-        "description": "결제 금액/포인트 등의 반환 권리를 배제하는 조항"
-      },
-      {
-        "keyword": "환불받을 수 없",
-        "risk_level": "critical",
-        "description": "고객의 환불 권리를 원천적으로 차단"
-      },
-      {
-        "keyword": "환불 받을 수 없",
-        "risk_level": "critical",
-        "description": "고객의 환불 권리를 원천적으로 차단"
-      },
-      {
-        "keyword": "어떠한 환불도",
-        "risk_level": "critical",
-        "description": "포괄적인 환불 금지 조항"
-      },
-      {
-        "keyword": "환불을 거부",
-        "risk_level": "critical",
-        "description": "사업자가 정당한 환불 요청을 거부할 수 있도록 하는 조항"
+        "name": "고지없음패턴",
+        "regex": "(별도|사전)\\s*고지\\s*없이",
+        "keyword": "고지 없이",
+        "risk_level": "high"
       }
     ]
   },
   "combined_pattern_risks": {
     "description": "여러 키워드가 복합적으로 나타날 때 위험도가 급증하는 패턴",
     "patterns": [
+      {
+        "combination": [
+          "무조건",
+          "책임지지 않"
+        ],
+        "articles": [
+          "제7조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 + 책임면제: 고의·중과실도 면책하는 절대적 면책조항"
+      },
+      {
+        "combination": [
+          "무조건",
+          "환불 불가"
+        ],
+        "articles": [
+          "제9조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 + 환불불가: 어떠한 사유라도 환불을 거부하는 절대적 제한"
+      },
+      {
+        "combination": [
+          "무조건",
+          "고객이 부담"
+        ],
+        "articles": [
+          "제6조",
+          "제7조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 + 고객 부담: 모든 위험을 예외 없이 고객에게 전가"
+      },
       {
         "combination": [
           "서면으로만",
@@ -637,19 +658,7 @@
           "제10조"
         ],
         "risk_level": "critical",
-        "description": "통지 없이 즉시 해지: 고객의 대응 기회 박탈"
-      },
-      {
-        "combination": [
-          "무조건",
-          "고객이 부담"
-        ],
-        "articles": [
-          "제6조",
-          "제7조"
-        ],
-        "risk_level": "critical",
-        "description": "무조건 고객 부담: 위험의 일방적 전가"
+        "description": "통지 없이 + 즉시 + 해지: 고객의 대응 기회 완전 박탈"
       },
       {
         "combination": [
@@ -661,7 +670,7 @@
           "제11조"
         ],
         "risk_level": "critical",
-        "description": "즉시 채무 변제: 기한의 이익 즉각 박탈"
+        "description": "즉시 + 채무 + 변제: 기한의 이익 즉각 박탈"
       },
       {
         "combination": [
@@ -672,19 +681,32 @@
           "제10조"
         ],
         "risk_level": "critical",
-        "description": "일방적이며 통지도 없음: 고객 보호 장치 전무"
+        "description": "일방적 + 통지 없음: 고객 보호 장치 전무"
+      },
+      {
+        "combination": [
+          "일방적",
+          "변경",
+          "즉시"
+        ],
+        "articles": [
+          "제10조"
+        ],
+        "risk_level": "critical",
+        "description": "일방적 + 변경 + 즉시: 고객에게 준비 기회 없이 일방적 변경"
       },
       {
         "combination": [
           "서면",
-          "30일 이내",
-          "자동"
+          "자동",
+          "30일"
         ],
         "articles": [
-          "제12조"
+          "제12조",
+          "제9조"
         ],
-        "risk_level": "high",
-        "description": "짧은 기간 + 서면 제한 + 자동: 현실적 대응 불가"
+        "risk_level": "critical",
+        "description": "서면 제한 + 자동 + 짧은 기간: 현실적 대응 불가능"
       },
       {
         "combination": [
@@ -709,29 +731,98 @@
         ],
         "risk_level": "critical",
         "description": "과다한 위약금 + 법정이율 초과: 부당한 경제적 부담 강제"
+      },
+      {
+        "combination": [
+          "어떠한 경우에도",
+          "책임지지 않"
+        ],
+        "articles": [
+          "제7조"
+        ],
+        "risk_level": "critical",
+        "description": "어떠한 경우에도 + 책임면제: 고의·중과실 포함 절대적 면책"
+      },
+      {
+        "combination": [
+          "일체",
+          "책임지지 않"
+        ],
+        "articles": [
+          "제7조"
+        ],
+        "risk_level": "critical",
+        "description": "일체 + 책임면제: 모든 책임을 포괄적으로 면제"
+      },
+      {
+        "combination": [
+          "환불 불가",
+          "서면으로만"
+        ],
+        "articles": [
+          "제9조",
+          "제12조"
+        ],
+        "risk_level": "critical",
+        "description": "환불불가 + 서면제한: 환불권 자체를 막고 이의제기도 어렵게 만듦"
+      },
+      {
+        "combination": [
+          "자동연장",
+          "별도 통지 없이"
+        ],
+        "articles": [
+          "제9조"
+        ],
+        "risk_level": "high",
+        "description": "자동연장 + 통지 없음: 고객이 계약 연장을 인지하지 못함"
+      },
+      {
+        "combination": [
+          "즉시",
+          "일방적",
+          "중지"
+        ],
+        "articles": [
+          "제10조"
+        ],
+        "risk_level": "critical",
+        "description": "즉시 + 일방적 + 중지: 사업자의 일방적 서비스 중단"
+      },
+      {
+        "combination": [
+          "무조건",
+          "소송 금지"
+        ],
+        "articles": [
+          "제14조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 + 소송금지: 고객의 사법적 구제 수단 완전 차단"
+      },
+      {
+        "combination": [
+          "기한의 이익 상실",
+          "별도 통지 없이"
+        ],
+        "articles": [
+          "제11조"
+        ],
+        "risk_level": "critical",
+        "description": "기한이익 상실 + 통지 없음: 갑작스런 채무 전액 변제 요구"
+      },
+      {
+        "combination": [
+          "손해배상",
+          "청구할 수 없",
+          "무조건"
+        ],
+        "articles": [
+          "제11조"
+        ],
+        "risk_level": "critical",
+        "description": "무조건 + 배상청구 불가: 정당한 손해배상 청구권 원천 차단"
       }
     ]
-  },
-  "metadata": {
-    "version": "3.1",
-    "updated_date": "2025-11-09",
-    "improvements": [
-      "약관법 조항 순서대로 재정렬 (제6조→제7조→제8조→제9조→제10조→제11조→제12조→제13조→제14조)",
-      "제8조(손해배상액의 예정) 신규 추가 - 과중한 손해배상액, 위약금, 연체이자 패턴 정의",
-      "제13조(대리인의 책임 가중) 신규 추가 - 대리인 책임 전가 패턴 정의",
-      "example_count와 examples 필드 제거 (불필요한 정보 삭제)",
-      "제9조에 '청약철회 및 환불 권리 제한' 패턴 추가",
-      "제11조에 '손해배상 청구권 제한' 패턴 추가",
-      "제14조에 '전속관할' 관련 키워드 보강",
-      "high_risk_keywords에 구체적인 표현들 추가",
-      "모든 패턴에 위험도(risk_level) 명확히 정의",
-      "복합 패턴 위험도(combined_pattern_risks)에 제8조, 제13조 관련 패턴 추가"
-    ],
-    "risk_level_definitions": {
-      "critical": "즉각적이고 중대한 고객 피해 가능성 - 법적 권리를 원천적으로 박탈하거나 과도한 경제적 부담을 강제하는 조항",
-      "high": "심각한 고객 불이익 우려 - 고객에게 현저히 불리하거나 부당한 책임을 부과하는 조항",
-      "medium": "상당한 고객 불이익 가능성 - 공정성 문제가 있고 개선이 필요한 조항",
-      "low": "경미한 불공정 요소 - 개선이 권장되는 조항"
-    }
   }
 }

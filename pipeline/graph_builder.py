@@ -5,6 +5,11 @@ CSV 데이터를 Law-Centric GraphRAG로 변환하는 파이프라인
 1. Law-Centric 구조: 법률 조항(조-항-호)을 중심으로 위반사례 연결
 2. ViolationCase → 호 노드로 직접 연결 (VIOLATES 관계)
 3. LawArticle 노드 제거, 기존 law_structure의 호 노드 활용
+4. Company 노드 제거 (속성으로만 유지)
+5. severity 제거 (Keyword 기반으로 실시간 계산)
+6. frequency → case_count 변경 (사례 등장 수 기반)
+7. 중주제/소주제 계층 구조 지원
+8. ✨ 정규표현식 기반 키워드 추출 추가 (표현 변형 대응)
 """
 
 import pandas as pd
@@ -22,6 +27,43 @@ class GraphRAGBuilder:
     def __init__(self, neo4j_connector, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2'):
         self.conn = neo4j_connector
         self.model = SentenceTransformer(embedding_model_name)
+        
+        # patterns_by_article_v2.json 로드
+        self._load_patterns()
+    
+    def _load_patterns(self):
+        """patterns_by_article_v2.json 로드"""
+        try:
+            from pathlib import Path
+            
+            # 현재 파일 기준 경로
+            current_dir = Path(__file__).parent
+            pattern_path = current_dir.parent / "data" / "contracts" / "reference" / "patterns_by_article_v2.json"
+            
+            # 대체 경로들
+            if not pattern_path.exists():
+                alternative_paths = [
+                    Path("data/contracts/reference/patterns_by_article_v2.json"),
+                    Path("../data/contracts/reference/patterns_by_article_v2.json"),
+                    Path("../../data/contracts/reference/patterns_by_article_v2.json"),
+                ]
+                for alt_path in alternative_paths:
+                    if alt_path.exists():
+                        pattern_path = alt_path
+                        break
+            
+            if pattern_path.exists():
+                with open(pattern_path, 'r', encoding='utf-8') as f:
+                    self.patterns = json.load(f)
+                print(f"✅ 패턴 데이터 로드 완료: {pattern_path}")
+            else:
+                print(f"⚠️ 패턴 파일을 찾을 수 없습니다: {pattern_path}")
+                print(f"   기본 하드코딩 패턴을 사용합니다.")
+                self.patterns = {}
+        except Exception as e:
+            print(f"⚠️ 패턴 로드 실패: {e}")
+            print(f"   기본 하드코딩 패턴을 사용합니다.")
+            self.patterns = {}
         
     def build_from_csv(self, csv_path: str):
         """CSV에서 전체 그래프 구축"""
@@ -48,13 +90,13 @@ class GraphRAGBuilder:
         print("\n⚖️ Step 5: 법률 조항 관계 생성 (Law-Centric)...")
         self._create_law_relationships_centric(df)
         
-        # Step 6: 키워드 추출 및 관계 생성 (빈도 기반 가중치)
-        print("\n🔑 Step 6: 키워드 추출 (빈도 가중치)...")
-        self._extract_and_link_keywords_with_frequency(df)
+        # Step 6: 키워드 추출 및 관계 생성 (사례 수 기반)
+        print("\n🔑 Step 6: 키워드 추출 (사례 수 기반 + 정규표현식)...")
+        self._extract_and_link_keywords_with_case_count(df)
         
-        # Step 7: 위반 유형 분류
+        # Step 7: 위반 유형 분류 (중주제/소주제 지원)
         print("\n📋 Step 7: 위반 유형 분류 중...")
-        self._categorize_violations(df)
+        self._categorize_violations_with_hierarchy(df)
         
         # Step 8: 통계 출력
         print("\n📈 그래프 구축 완료!")
@@ -89,11 +131,11 @@ class GraphRAGBuilder:
         print("\n⚖️ Step 5: 법률 조항 관계 생성 (Law-Centric)...")
         self._create_law_relationships_centric(df_total)
 
-        print("\n🔑 Step 6: 키워드 추출 (빈도 가중치)...")
-        self._extract_and_link_keywords_with_frequency(df_total)
+        print("\n🔑 Step 6: 키워드 추출 (사례 수 기반 + 정규표현식)...")
+        self._extract_and_link_keywords_with_case_count(df_total)
 
         print("\n📋 Step 7: 위반 유형 분류 중...")
-        self._categorize_violations(df_total)
+        self._categorize_violations_with_hierarchy(df_total)
 
         print("\n📈 그래프 구축 완료!")
         self._print_statistics()
@@ -143,10 +185,17 @@ class GraphRAGBuilder:
         return df_filtered
     
     def _generate_embeddings(self, df: pd.DataFrame) -> Dict[str, np.ndarray]:
-        """텍스트 임베딩 생성 (이미 NaN 제거된 DataFrame)"""
+        """
+        텍스트 임베딩 생성
+        
+        임베딩 대상:
+        1. violation_original: 불공정 약관 원문 (유사도 검색용)
+        2. violation_corrected: 수정 후 약관 (공정 사례 비교용)
+        3. violation_reason: 시정 요청 사유 (추가 컨텍스트)
+        """
         embeddings = {}
 
-        # 1️⃣ 위반 사례 원문 임베딩
+        # 1️⃣ 위반 사례 원문 임베딩 (가장 중요!)
         print("  - 위반 사례 임베딩...")
         texts = df['불공정 약관 원문'].tolist()
         embeddings['violation_original'] = self.model.encode(
@@ -155,7 +204,7 @@ class GraphRAGBuilder:
             batch_size=32
         )
 
-        # 2️⃣ 수정 후 약관 임베딩
+        # 2️⃣ 수정 후 약관 임베딩 (공정한 약관 비교용)
         print("\n  - 수정 약관 임베딩...")
         corrected_texts = df['수정 후 약관 조항'].fillna('').tolist()
         embeddings['violation_corrected'] = self.model.encode(
@@ -164,7 +213,7 @@ class GraphRAGBuilder:
             batch_size=32
         )
 
-        # 3️⃣ 시정 사유 임베딩
+        # 3️⃣ 시정 사유 임베딩 (추가 컨텍스트)
         print("\n  - 시정 사유 임베딩...")
         reason_texts = df['시정 요청 사유'].tolist()
         embeddings['violation_reason'] = self.model.encode(
@@ -176,13 +225,13 @@ class GraphRAGBuilder:
         return embeddings
     
     def _create_nodes(self, df: pd.DataFrame, embeddings: Dict):
-        """노드 생성"""
+        """노드 생성 (severity 제거!)"""
         # 위반 사례 노드 생성
         print("  - ViolationCase 노드 생성...")
         for idx, row in tqdm(df.iterrows(), total=len(df)):
             case_id = f"CASE_{row['ID']}"
             
-            # 벡터를 리스트로 변환
+            # 벡터를 리스트로 변환 (Neo4j 저장용)
             embedding_list = embeddings['violation_original'][idx].tolist()
             
             query = """
@@ -193,7 +242,6 @@ class GraphRAGBuilder:
                 violation_reason: $reason,
                 company: $company,
                 year: $year,
-                severity: $severity,
                 category: $category,
                 subcategory: $subcategory,
                 article_id: $article_id,
@@ -209,7 +257,9 @@ class GraphRAGBuilder:
                 'reason': row['시정 요청 사유'],
                 'company': self._extract_company_name(row['파일명']),
                 'year': self._extract_year(row['파일명']),
-                'severity': self._determine_severity(row['시정 요청 사유']),
+                
+                # ❌ severity 제거! (Keyword 기반으로 실시간 계산)
+                
                 'category': row['대주제'],
                 'subcategory': row.get('소주제', ''),
                 'article_id': self._extract_article_id(row.get('근거 조항(약관법)', '')),
@@ -217,16 +267,16 @@ class GraphRAGBuilder:
                 'embedding': embedding_list
             })
         
-        # 위반 유형 노드 생성
-        print("  - ViolationType 노드 생성...")
-        self._create_violation_type_nodes(df)
-        
-        # 회사 노드 생성
-        print("  - Company 노드 생성...")
-        self._create_company_nodes(df)
+        # 위반 유형 노드는 나중에 생성 (_categorize_violations_with_hierarchy에서)
     
     def _create_similarity_relationships(self, df: pd.DataFrame, embeddings: Dict):
-        """유사도 기반 관계 생성"""
+        """
+        유사도 기반 관계 생성
+        
+        ViolationCase 간 SIMILAR_TO 관계:
+        - 코사인 유사도 0.7 이상인 사례끼리 연결
+        - 각 사례당 최대 5개까지만 연결
+        """
         print("  - 유사도 행렬 계산 중...")
         original_embeddings = embeddings['violation_original']
         
@@ -234,8 +284,8 @@ class GraphRAGBuilder:
         similarity_matrix = cosine_similarity(original_embeddings)
         
         print("  - SIMILAR_TO 관계 생성 중...")
-        threshold = 0.7
-        top_k = 5
+        threshold = 0.7  # 유사도 임계값
+        top_k = 5        # 최대 연결 개수
         
         for i in tqdm(range(len(df))):
             case_id_1 = f"CASE_{df.iloc[i]['ID']}"
@@ -269,13 +319,12 @@ class GraphRAGBuilder:
     
     def _create_law_relationships_centric(self, df: pd.DataFrame):
         """
-        [Law-Centric 구조]
-        ViolationCase → 호(또는 항, 조) 노드로 직접 연결
+        [Law-Centric 구조] ViolationCase → 호/항/조 노드 연결
         
         연결 우선순위:
-        1. 호 노드 (가장 구체적)
-        2. 항 노드 (호가 없는 경우)
-        3. 조 노드 (항도 없는 경우)
+        1. 호 노드 (가장 구체적) - 예: "제7조_제2호"
+        2. 항 노드 (호가 없는 경우) - 예: "제6조_제1항"
+        3. 조 노드 (항도 없는 경우) - 예: "제8조"
         """
         print("  - ViolationCase → 법률 노드 연결 (Law-Centric)...")
         
@@ -402,60 +451,83 @@ class GraphRAGBuilder:
             'node_id': node_id
         })
     
-    def _extract_and_link_keywords_with_frequency(self, df: pd.DataFrame):
+    def _extract_and_link_keywords_with_case_count(self, df: pd.DataFrame):
         """
-        키워드 추출 및 관계 생성 (빈도 기반 가중치)
+        키워드 추출 및 관계 생성 (사례 수 기반 + 정규표현식)
         
-        개선사항:
-        - 키워드 빈도를 계산하여 가중치 부여
-        - 자주 나타나는 키워드는 더 높은 위험도
+        ✅ 개선: frequency → case_count
+        ✅ 신규: 정규표현식으로 표현 변형 대응
+        
+        변경 사항:
+        - frequency (텍스트에서 등장 횟수) → case_count (사례 등장 수)
+        - importance → prevalence (일반성 지표)
+        
+        Keyword 노드 속성:
+        - text: 키워드 텍스트
+        - case_count: 이 키워드가 등장한 사례 수
+        - prevalence: 사례 등장 비율 (case_count / 50)
+        - risk_level: JSON의 risk_level
         """
-        print("  - 키워드 추출 및 빈도 계산...")
+        print("  - 키워드 추출 및 사례 수 계산 (정규표현식 포함)...")
         
-        # 전체 텍스트에서 키워드 빈도 계산
-        keyword_frequency = {}
-        all_keywords = set()
+        # 키워드가 등장한 사례 수 계산
+        keyword_case_count = {}
+        keyword_case_ids = {}  # 디버깅용: 어느 사례에 등장했는지
         
         for idx, row in df.iterrows():
+            case_id = f"CASE_{row['ID']}"
             text = row['불공정 약관 원문']
             reason = row['시정 요청 사유']
             
+            # 키워드 추출 (문자열 매칭 + 정규표현식)
             keywords = self._extract_keywords(text, reason)
             
-            for kw in keywords:
-                all_keywords.add(kw)
-                keyword_frequency[kw] = keyword_frequency.get(kw, 0) + 1
+            # 각 키워드마다 사례 1개 카운트 (중복 제거)
+            for kw in set(keywords):
+                keyword_case_count[kw] = keyword_case_count.get(kw, 0) + 1
+                
+                if kw not in keyword_case_ids:
+                    keyword_case_ids[kw] = []
+                keyword_case_ids[kw].append(case_id)
         
-        # 빈도 기준 상위 키워드만 노드로 생성
-        print("  - Keyword 노드 생성 (빈도 기반)...")
-        min_frequency = 2  # 최소 2회 이상 출현한 키워드만
+        # 사례 수 기준 상위 키워드만 노드로 생성
+        print("  - Keyword 노드 생성 (사례 수 기반)...")
+        min_case_count = 2  # 최소 2개 사례 이상에서 등장한 키워드만
         
-        for kw, freq in keyword_frequency.items():
-            if freq < min_frequency:
+        total_cases = len(df)
+        
+        for kw, case_count in keyword_case_count.items():
+            if case_count < min_case_count:
                 continue
             
-            # 빈도에 따른 중요도 점수
-            importance = min(freq / 10.0, 1.0)
+            # 사례 등장 비율 (일반성 지표)
+            # 50개 이상 사례에서 등장하면 1.0
+            prevalence = min(case_count / 50.0, 1.0)
+            
+            # 퍼센트로도 계산
+            percentage = (case_count / total_cases) * 100
             
             query = """
             MERGE (k:Keyword {text: $keyword})
             ON CREATE SET
                 k.id = $id,
-                k.frequency = $frequency,
-                k.importance = $importance,
+                k.case_count = $case_count,
+                k.prevalence = $prevalence,
+                k.percentage = $percentage,
                 k.risk_level = $risk_level
             """
             
             self.conn.execute_query(query, {
                 'keyword': kw,
                 'id': f"KW_{kw}",
-                'frequency': freq,
-                'importance': importance,
-                'risk_level': self._determine_keyword_risk(kw, freq)
+                'case_count': case_count,
+                'prevalence': prevalence,
+                'percentage': round(percentage, 2),
+                'risk_level': self._get_keyword_risk_from_json(kw)
             })
         
-        # ViolationCase → Keyword 관계 생성 (빈도 가중치 포함)
-        print("  - CONTAINS 관계 생성 (빈도 가중치)...")
+        # ViolationCase → Keyword 관계 생성
+        print("  - CONTAINS 관계 생성...")
         
         for idx, row in tqdm(df.iterrows(), total=len(df)):
             case_id = f"CASE_{row['ID']}"
@@ -464,147 +536,419 @@ class GraphRAGBuilder:
             
             keywords = self._extract_keywords(text, reason)
             
-            for kw in keywords:
-                if keyword_frequency.get(kw, 0) < min_frequency:
+            for kw in set(keywords):  # 중복 제거
+                # 사례 수 2개 미만 키워드는 노드가 없으므로 스킵
+                if keyword_case_count.get(kw, 0) < min_case_count:
                     continue
-                
-                # 빈도에 따른 가중치
-                weight = keyword_frequency[kw] / max(keyword_frequency.values())
                 
                 query = """
                 MATCH (v:ViolationCase {id: $case_id})
                 MATCH (k:Keyword {text: $keyword})
-                CREATE (v)-[:CONTAINS {
-                    weight: $weight,
-                    frequency_score: $frequency
-                }]->(k)
+                CREATE (v)-[:CONTAINS]->(k)
                 """
                 
                 self.conn.execute_query(query, {
                     'case_id': case_id,
-                    'keyword': kw,
-                    'weight': weight,
-                    'frequency': keyword_frequency[kw]
+                    'keyword': kw
                 })
     
-    def _determine_keyword_risk(self, keyword: str, frequency: int) -> str:
+    def _get_keyword_risk_from_json(self, keyword: str) -> str:
         """
-        키워드 위험도 판단 (빈도 고려)
+        patterns_by_article_v2.json에서 키워드의 위험도 조회
         """
+        # 패턴이 없으면 기본값
+        if not self.patterns:
+            return self._determine_keyword_risk_fallback(keyword)
+        
+        # 1️⃣ universal_risk_keywords에서 찾기
+        universal = self.patterns.get('universal_risk_keywords', {})
+        if 'keywords' in universal:
+            for kw_info in universal['keywords']:
+                if kw_info['keyword'] == keyword:
+                    return kw_info.get('risk_level', 'medium')
+        
+        # 2️⃣ 각 조항의 패턴에서 찾기
+        for article_id in ['제6조', '제7조', '제8조', '제9조', '제10조', 
+                          '제11조', '제12조', '제13조', '제14조']:
+            
+            if article_id not in self.patterns:
+                continue
+            
+            article_data = self.patterns[article_id]
+            
+            for pattern in article_data.get('patterns', []):
+                # high_risk_keywords에 있으면 해당 패턴의 risk_level
+                if keyword in pattern.get('high_risk_keywords', []):
+                    return pattern.get('risk_level', 'high')
+                
+                # 일반 keywords에 있으면 한 단계 낮춤
+                if keyword in pattern.get('keywords', []):
+                    risk = pattern.get('risk_level', 'medium')
+                    if risk == 'critical':
+                        return 'high'
+                    elif risk == 'high':
+                        return 'medium'
+                    else:
+                        return risk
+        
+        # 3️⃣ 복합 패턴에서 찾기
+        combined = self.patterns.get('combined_pattern_risks', {})
+        if 'patterns' in combined:
+            for pattern in combined['patterns']:
+                combination = pattern.get('combination', [])
+                if '+' in keyword:
+                    parts = keyword.split('+')
+                    if all(part in combination for part in parts):
+                        return pattern.get('risk_level', 'high')
+        
+        # 못 찾으면 기본값
+        return 'medium'
+    
+    def _determine_keyword_risk_fallback(self, keyword: str) -> str:
+        """패턴 JSON이 없을 때 사용할 기본 위험도 판단"""
         high_risk_keywords = [
             '어떠한 경우에도', '일체', '책임지지 않', '면책', '부당하게',
-            '과도한', '부담', '권리행사', '제한', '포기'
+            '과도한', '무조건', '환불 불가', '환불이 불가', '즉시 채무 변제'
         ]
         
         medium_risk_keywords = [
-            '책임', '손해배상', '불가항력', '해제', '해지', '변경'
+            '책임', '손해배상', '불가항력', '해제', '해지', '변경',
+            '별도 통지 없이', '자동', '즉시'
         ]
         
-        # 빈도가 높으면 위험도 상승
-        if frequency >= 10:
-            if any(hrk in keyword for hrk in high_risk_keywords):
-                return 'critical'
-            elif any(mrk in keyword for mrk in medium_risk_keywords):
-                return 'high'
-            else:
-                return 'medium'
-        elif frequency >= 5:
-            if any(hrk in keyword for hrk in high_risk_keywords):
-                return 'high'
-            elif any(mrk in keyword for mrk in medium_risk_keywords):
-                return 'medium'
-            else:
-                return 'low'
-        else:
-            if any(hrk in keyword for hrk in high_risk_keywords):
-                return 'medium'
-            else:
-                return 'low'
-    
-    def _categorize_violations(self, df: pd.DataFrame):
-        """위반 유형별 분류"""
-        print("  - ViolationType 관계 생성...")
-        
-        for idx, row in tqdm(df.iterrows(), total=len(df)):
-            case_id = f"CASE_{row['ID']}"
-            violation_type = row['대주제']
-            
-            if pd.isna(violation_type):
-                continue
-            
-            query = """
-            MATCH (v:ViolationCase {id: $case_id})
-            MATCH (t:ViolationType {name: $type_name})
-            CREATE (v)-[:CLASSIFIED_AS]->(t)
-            """
-            
-            self.conn.execute_query(query, {
-                'case_id': case_id,
-                'type_name': violation_type
-            })
-    
-    # =============================================================================
-    # 헬퍼 메서드
-    # =============================================================================
-    
-    def _extract_company_name(self, filename: str) -> str:
-        """파일명에서 회사명 추출 (안전 처리)"""
-        if pd.isna(filename) or not isinstance(filename, str):
-            return "Unknown"
-        
-        parts = filename.split('_')
-        if len(parts) > 1:
-            return parts[1]
-        return "Unknown"
-    
-    def _extract_year(self, filename: str) -> int:
-        """파일명에서 연도 추출 (안전 처리)"""
-        if pd.isna(filename) or not isinstance(filename, str):
-            return 2020
-        
-        match = re.search(r'(\d{2})(\d{2})(\d{2})', filename)
-        if match:
-            year_short = match.group(1)
-            year = int('20' + year_short) if int(year_short) < 50 else int('19' + year_short)
-            return year
-        return 2020
-    
-    def _determine_severity(self, reason: str) -> str:
-        """시정 사유로부터 심각도 판단"""
-        if pd.isna(reason):
-            return 'low'
-        
-        high_keywords = ['부당하게 불리', '중대한', '일체', '어떠한 경우에도']
-        medium_keywords = ['불공정', '불리', '제한']
-        
-        reason_lower = str(reason).lower()
-        
-        if any(kw in reason_lower for kw in high_keywords):
+        if any(hrk in keyword for hrk in high_risk_keywords):
             return 'high'
-        elif any(kw in reason_lower for kw in medium_keywords):
+        elif any(mrk in keyword for mrk in medium_risk_keywords):
             return 'medium'
         else:
             return 'low'
     
-    def _extract_article_id(self, legal_basis: str) -> str:
-        """근거 조항에서 조 번호 추출"""
-        if not legal_basis or pd.isna(legal_basis):
-            return None
+    def _categorize_violations_with_hierarchy(self, df: pd.DataFrame):
+        """
+        위반 유형 계층 구조 생성
         
-        match = re.search(r'제(\d+)조', str(legal_basis))
-        if match:
-            return f"제{match.group(1)}조"
-        return None
+        구조:
+        - 최종본 CSV: 대주제 (조항명) > 중주제 > 소주제
+        - ai.csv: 대주제만 (ViolationType)
+        
+        노드:
+        - MajorTopic (중주제)
+        - MinorTopic (소주제)
+        - ViolationType (대주제, ai.csv용)
+        """
+        
+        # 중주제/소주제 컬럼 존재 여부 확인
+        has_major = '중주제' in df.columns
+        has_minor = '소주제' in df.columns
+        
+        if has_major:
+            print("  - 중주제/소주제 계층 구조 생성...")
+            self._create_detailed_hierarchy(df, has_minor)
+        else:
+            print("  - 대주제 기반 분류 (ai.csv)...")
+            self._create_simple_category(df)
+    
+    def _create_detailed_hierarchy(self, df: pd.DataFrame, has_minor: bool):
+        """
+        중주제/소주제 계층 구조 생성 (최종본 CSV)
+        
+        ViolationCase
+          ├─[HAS_MAJOR_TOPIC]─> MajorTopic (중주제)
+          └─[HAS_MINOR_TOPIC]─> MinorTopic (소주제)
+        """
+        # 1. MajorTopic 노드 생성
+        major_topics = df['중주제'].dropna().unique()
+        
+        for major_topic in major_topics:
+            query = """
+            MERGE (m:MajorTopic {name: $name})
+            ON CREATE SET
+                m.id = $id,
+                m.description = $name
+            """
+            self.conn.execute_query(query, {
+                'name': major_topic,
+                'id': f"MAJOR_{major_topic.replace(' ', '_')}"
+            })
+        
+        # 2. MinorTopic 노드 생성 (있으면)
+        if has_minor:
+            minor_topics = df['소주제'].dropna().unique()
+            
+            for minor_topic in minor_topics:
+                query = """
+                MERGE (n:MinorTopic {name: $name})
+                ON CREATE SET
+                    n.id = $id,
+                    n.description = $name
+                """
+                self.conn.execute_query(query, {
+                    'name': minor_topic,
+                    'id': f"MINOR_{minor_topic.replace(' ', '_')}"
+                })
+        
+        # 3. 관계 생성
+        for idx, row in tqdm(df.iterrows(), total=len(df)):
+            case_id = f"CASE_{row['ID']}"
+            
+            # ViolationCase → MajorTopic
+            major_topic = row.get('중주제')
+            if pd.notna(major_topic):
+                query = """
+                MATCH (v:ViolationCase {id: $case_id})
+                MERGE (m:MajorTopic {name: $major_topic})
+                MERGE (v)-[:HAS_MAJOR_TOPIC]->(m)
+                """
+                self.conn.execute_query(query, {
+                    'case_id': case_id,
+                    'major_topic': major_topic
+                })
+            
+            # ViolationCase → MinorTopic
+            if has_minor:
+                minor_topic = row.get('소주제')
+                if pd.notna(minor_topic):
+                    query = """
+                    MATCH (v:ViolationCase {id: $case_id})
+                    MERGE (n:MinorTopic {name: $minor_topic})
+                    MERGE (v)-[:HAS_MINOR_TOPIC]->(n)
+                    """
+                    self.conn.execute_query(query, {
+                        'case_id': case_id,
+                        'minor_topic': minor_topic
+                    })
+    
+    def _create_simple_category(self, df: pd.DataFrame):
+        """
+        대주제 기반 분류 (ai.csv용)
+        
+        ViolationCase
+          └─[CLASSIFIED_AS]─> ViolationType (대주제)
+        """
+        # ViolationType 노드 생성
+        violation_types = df['대주제'].dropna().unique()
+        
+        for vtype in violation_types:
+            query = """
+            MERGE (t:ViolationType {name: $name})
+            ON CREATE SET
+                t.id = $id,
+                t.description = $name
+            """
+            self.conn.execute_query(query, {
+                'name': vtype,
+                'id': f"TYPE_{vtype.replace(' ', '_')}"
+            })
+        
+        # 관계 생성
+        for idx, row in tqdm(df.iterrows(), total=len(df)):
+            case_id = f"CASE_{row['ID']}"
+            violation_type = row.get('대주제')
+            
+            if pd.notna(violation_type):
+                query = """
+                MATCH (v:ViolationCase {id: $case_id})
+                MERGE (t:ViolationType {name: $type_name})
+                MERGE (v)-[:CLASSIFIED_AS]->(t)
+                """
+                self.conn.execute_query(query, {
+                    'case_id': case_id,
+                    'type_name': violation_type
+                })
+    
+    # =============================================================================
+    # 키워드 추출 (정규표현식 추가!)
+    # =============================================================================
     
     def _extract_keywords(self, text: str, reason: str) -> List[str]:
-        """키워드 추출"""
+        """
+        키워드 추출 (문자열 매칭 + 정규표현식)
+        
+        추출 방식:
+        1. 기존 문자열 매칭
+        2. 정규표현식 패턴 매칭 (표현 변형 대응)
+        3. 복합 패턴 체크
+        """
         keywords = set()
         
-        # 위험 패턴
+        # 1️⃣ 기존 문자열 매칭
+        keywords.update(self._extract_keywords_string_match(text, reason))
+        
+        # 2️⃣ 정규표현식 패턴 매칭
+        keywords.update(self._extract_keywords_with_regex(text, reason))
+        
+        # 3️⃣ 복합 패턴 체크
+        keywords.update(self._check_combined_patterns(text, reason))
+        
+        return list(keywords)
+    
+    def _extract_keywords_string_match(self, text: str, reason: str) -> List[str]:
+        """
+        기존 문자열 매칭 방식 (patterns_by_article_v2.json 사용)
+        """
+        keywords = set()
+        combined_text = f"{text} {reason}"
+        
+        # 패턴이 로드되지 않은 경우 기본 패턴 사용
+        if not self.patterns:
+            return self._extract_keywords_fallback(text, reason)
+        
+        # 1️⃣ 범용 위험 키워드
+        universal = self.patterns.get('universal_risk_keywords', {})
+        if 'keywords' in universal:
+            for kw_info in universal['keywords']:
+                keyword = kw_info['keyword']
+                if keyword in combined_text:
+                    keywords.add(keyword)
+        
+        # 2️⃣ 조항별 패턴
+        for article_id in ['제6조', '제7조', '제8조', '제9조', '제10조', 
+                          '제11조', '제12조', '제13조', '제14조']:
+            
+            if article_id not in self.patterns:
+                continue
+            
+            article_data = self.patterns[article_id]
+            
+            for pattern in article_data.get('patterns', []):
+                # 일반 키워드
+                for kw in pattern.get('keywords', []):
+                    if kw in combined_text:
+                        keywords.add(kw)
+                
+                # 고위험 키워드
+                for kw in pattern.get('high_risk_keywords', []):
+                    if kw in combined_text:
+                        keywords.add(kw)
+        
+        return list(keywords)
+    
+    def _extract_keywords_with_regex(self, text: str, reason: str) -> List[str]:
+        """
+        정규표현식으로 유사 표현 처리
+        
+        예시:
+        - "책임지지 않는다" / "책임 지지 않습니다" / "책임을 부담하지 않는다"
+          → 모두 "책임지지 않음" 키워드로 통일
+        """
+        keywords = set()
+        combined_text = f"{text} {reason}"
+        
+        # JSON에서 regex_patterns 사용
+        if not self.patterns:
+            return []
+        
+        # 1️⃣ 범용 정규표현식 패턴
+        universal = self.patterns.get('universal_risk_keywords', {})
+        if 'regex_patterns' in universal:
+            for pattern_info in universal['regex_patterns']:
+                if re.search(pattern_info['regex'], combined_text):
+                    keywords.add(pattern_info['keyword'])
+        
+        # 2️⃣ 조항별 정규표현식 패턴
+        for article_id in ['제6조', '제7조', '제8조', '제9조', '제10조', 
+                          '제11조', '제12조', '제13조', '제14조']:
+            
+            if article_id not in self.patterns:
+                continue
+            
+            article_data = self.patterns[article_id]
+            
+            if 'regex_patterns' in article_data:
+                for pattern_info in article_data['regex_patterns']:
+                    if re.search(pattern_info['regex'], combined_text):
+                        keywords.add(pattern_info['keyword'])
+        
+        return list(keywords)
+    
+    def _check_combined_patterns(self, text: str, reason: str) -> List[str]:
+        """
+        복합 패턴 체크 (정규표현식 지원)
+        
+        예시:
+        - "무조건" + "책임지지 않" → critical
+        - "서면으로만" + "자동연장" → critical
+        """
+        combined_keywords = []
+        combined_text = f"{text} {reason}"
+        
+        if not self.patterns:
+            return []
+        
+        combined = self.patterns.get('combined_pattern_risks', {})
+        if 'patterns' not in combined:
+            return []
+        
+        for pattern in combined['patterns']:
+            combination = pattern.get('combination', [])
+            
+            # 모든 키워드가 포함되어 있는지 체크 (정규식으로)
+            all_matched = True
+            for kw in combination:
+                # 해당 키워드의 정규식 패턴 찾기
+                regex_pattern = self._find_regex_for_keyword(kw)
+                
+                if regex_pattern:
+                    # 정규식으로 매칭
+                    if not re.search(regex_pattern, combined_text):
+                        all_matched = False
+                        break
+                else:
+                    # 문자열 매칭
+                    if kw not in combined_text:
+                        all_matched = False
+                        break
+            
+            if all_matched:
+                # 복합 키워드 생성 (예: "무조건+책임지지 않")
+                combo_key = '+'.join(combination[:2])
+                combined_keywords.append(combo_key)
+        
+        return combined_keywords
+    
+    def _find_regex_for_keyword(self, keyword: str) -> str:
+        """
+        키워드에 대응하는 정규표현식 패턴 찾기
+        
+        Returns:
+            정규표현식 문자열 (없으면 None)
+        """
+        if not self.patterns:
+            return None
+        
+        # 1️⃣ 범용 패턴에서 찾기
+        universal = self.patterns.get('universal_risk_keywords', {})
+        if 'regex_patterns' in universal:
+            for pattern_info in universal['regex_patterns']:
+                if pattern_info['keyword'] == keyword:
+                    return pattern_info['regex']
+        
+        # 2️⃣ 조항별 패턴에서 찾기
+        for article_id in ['제6조', '제7조', '제8조', '제9조', '제10조', 
+                          '제11조', '제12조', '제13조', '제14조']:
+            
+            if article_id not in self.patterns:
+                continue
+            
+            article_data = self.patterns[article_id]
+            
+            if 'regex_patterns' in article_data:
+                for pattern_info in article_data['regex_patterns']:
+                    if pattern_info['keyword'] == keyword:
+                        return pattern_info['regex']
+        
+        return None
+    
+    def _extract_keywords_fallback(self, text: str, reason: str) -> List[str]:
+        """패턴 로드 실패 시 기본 패턴"""
+        keywords = set()
+        
         risk_patterns = [
             '어떠한 경우에도', '일체', '책임지지 않', '면책',
             '부당하게', '과도한', '불가항력', '해제', '해지',
-            '변경', '손해배상', '제한', '포기', '권리행사'
+            '변경', '손해배상', '제한', '포기', '권리행사',
+            '무조건', '별도 통지 없이', '즉시', '자동',
+            '환불 불가', '환불이 불가', '서면으로만'
         ]
         
         combined_text = f"{text} {reason}"
@@ -615,106 +959,66 @@ class GraphRAGBuilder:
         
         return list(keywords)
     
-    def _create_violation_type_nodes(self, df: pd.DataFrame):
-        """위반 유형 노드 생성"""
-        violation_types = df['대주제'].unique()
-        
-        for vtype in violation_types:
-            if pd.isna(vtype):
-                continue
-            
-            query = """
-            MERGE (t:ViolationType {name: $name})
-            ON CREATE SET
-                t.id = $id,
-                t.description = $description
-            """
-            
-            self.conn.execute_query(query, {
-                'name': vtype,
-                'id': f"TYPE_{vtype.replace(' ', '_')}",
-                'description': vtype
-            })
+    # =============================================================================
+    # 헬퍼 메서드
+    # =============================================================================
     
-    def _create_company_nodes(self, df: pd.DataFrame):
-        """회사 노드 생성"""
-        companies = df['파일명'].apply(self._extract_company_name).unique()
+    def _extract_company_name(self, filename: str) -> str:
+        """파일명에서 회사명 추출"""
+        if pd.isna(filename) or not isinstance(filename, str):
+            return "Unknown"
         
-        for company in companies:
-            if company == "Unknown" or pd.isna(company):
-                continue
-            
-            count = len(df[df['파일명'].apply(self._extract_company_name) == company])
-            
-            query = """
-            MERGE (c:Company {name: $name})
-            ON CREATE SET
-                c.violation_count = $count,
-                c.industry = $industry
-            """
-            
-            self.conn.execute_query(query, {
-                'name': company,
-                'count': count,
-                'industry': self._determine_industry(company)
-            })
-            
-            # 회사-사례 연결
-            company_cases = df[df['파일명'].apply(self._extract_company_name) == company]
-            for idx, row in company_cases.iterrows():
-                case_id = f"CASE_{row['ID']}"
-                
-                rel_query = """
-                MATCH (v:ViolationCase {id: $case_id})
-                MATCH (c:Company {name: $company})
-                CREATE (v)-[:COMMITTED_BY {
-                    date: date($year + '-01-01')
-                }]->(c)
-                """
-                
-                self.conn.execute_query(rel_query, {
-                    'case_id': case_id,
-                    'company': company,
-                    'year': str(self._extract_year(row['파일명']))
-                })
+        parts = filename.split('_')
+        if len(parts) > 1:
+            return parts[1]
+        return "Unknown"
     
-    def _determine_industry(self, company: str) -> str:
-        """회사명으로부터 업종 판단"""
-        if pd.isna(company):
-            return '기타금융'
+    def _extract_year(self, filename: str) -> int:
+        """파일명에서 연도 추출"""
+        if pd.isna(filename) or not isinstance(filename, str):
+            return 2020
         
-        company_str = str(company)
-        if '은행' in company_str:
-            return '은행'
-        elif '보험' in company_str:
-            return '보험'
-        elif '카드' in company_str or '여신' in company_str:
-            return '여신금융'
-        elif '저축' in company_str:
-            return '저축은행'
-        else:
-            return '기타금융'
+        match = re.search(r'(\d{2})(\d{2})(\d{2})', filename)
+        if match:
+            year_short = match.group(1)
+            year = int('20' + year_short) if int(year_short) < 50 else int('19' + year_short)
+            return year
+        return 2020
+    
+    def _extract_article_id(self, legal_basis: str) -> str:
+        """근거 조항에서 조 번호만 추출"""
+        if not legal_basis or pd.isna(legal_basis):
+            return None
+        
+        match = re.search(r'제(\d+)조', str(legal_basis))
+        if match:
+            return f"제{match.group(1)}조"
+        return None
     
     def _print_statistics(self):
         """그래프 통계 출력"""
         queries = {
             "ViolationCase": "MATCH (n:ViolationCase) RETURN count(n) as count",
+            "MajorTopic": "MATCH (n:MajorTopic) RETURN count(n) as count",
+            "MinorTopic": "MATCH (n:MinorTopic) RETURN count(n) as count",
             "ViolationType": "MATCH (n:ViolationType) RETURN count(n) as count",
-            "Company": "MATCH (n:Company) RETURN count(n) as count",
             "Keyword": "MATCH (n:Keyword) RETURN count(n) as count",
             "SIMILAR_TO": "MATCH ()-[r:SIMILAR_TO]->() RETURN count(r) as count",
             "VIOLATES": "MATCH ()-[r:VIOLATES]->() RETURN count(r) as count",
             "CONTAINS": "MATCH ()-[r:CONTAINS]->() RETURN count(r) as count",
+            "HAS_MAJOR_TOPIC": "MATCH ()-[r:HAS_MAJOR_TOPIC]->() RETURN count(r) as count",
+            "HAS_MINOR_TOPIC": "MATCH ()-[r:HAS_MINOR_TOPIC]->() RETURN count(r) as count",
         }
         
         print("\n" + "="*50)
-        print("📊 그래프 통계 (Law-Centric)")
+        print("📊 그래프 통계 (Law-Centric v2 + Regex)")
         print("="*50)
         
         for name, query in queries.items():
             result = self.conn.execute_query(query)
             count = result[0]['count'] if result else 0
-            print(f"  {name:20s}: {count:6d}")
+            if count > 0:  # 0이 아닌 것만 출력
+                print(f"  {name:20s}: {count:6d}")
         
         print("="*50)
 
