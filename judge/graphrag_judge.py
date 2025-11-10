@@ -1,13 +1,13 @@
 """
-GraphRAG 기반 불공정 약관 판단 시스템 - v5
+GraphRAG 기반 불공정 약관 판단 시스템 - v6
 
 [핵심 변경사항]
-1. ✅ Keyword 노드 구조 변경 반영 (frequency → case_count, prevalence)
-2. ✅ severity 제거 반영 (실시간 계산으로 변경)
-3. ✅ 정규표현식 키워드 매칭 지원
-4. ✅ 중주제/소주제 계층 구조 지원
-5. Law-Centric 구조와 완전 연결 (조-항-호)
-6. 수정본(공정한 약관)과의 거리 비교
+1. ✅ 상대적 거리 기반 불공정도 계산 (Phase 1.5 개선!)
+2. ✅ Keyword 노드 구조 변경 반영 (frequency → case_count, prevalence)
+3. ✅ severity 제거 반영 (실시간 계산으로 변경)
+4. ✅ 정규표현식 키워드 매칭 지원
+5. ✅ 중주제/소주제 계층 구조 지원
+6. Law-Centric 구조와 완전 연결 (조-항-호)
 7. 점수 배분 재조정 + LLM 최종 판단
 8. 위반 퍼센트에 따른 표현 차별화
 9. 6조 후순위 유지
@@ -24,7 +24,7 @@ import re
 
 
 class GraphRAGJudge:
-    """GraphRAG 기반 약관 판단 시스템 v5"""
+    """GraphRAG 기반 약관 판단 시스템 v6"""
     
     def __init__(self, rag: HybridGraphRAG, conn: Neo4jConnector):
         self.rag = rag
@@ -126,15 +126,23 @@ class GraphRAGJudge:
             unfair_similarity = best_match['similarity_score']
             
             # ==================================================================
-            # Phase 1.5: 공정 사례(수정본) 유사도 검색
+            # Phase 1.5: 상대적 거리 기반 불공정도 계산 (개선!)
             # ==================================================================
-            print("📍 Phase 1.5: 공정 사례(수정본) 유사도 검색")
+            print("📍 Phase 1.5: 상대적 거리 기반 불공정도 계산")
             print("-" * 70)
             
-            fair_similarity = self._search_fair_cases(user_text, best_case_id)
+            relative_unfairness = self._calculate_relative_unfairness(
+                user_text,
+                best_case_id,
+                unfair_similarity
+            )
             
-            print(f"✅ 불공정 유사도: {unfair_similarity:.3f}")
-            print(f"✅ 공정 유사도: {fair_similarity:.3f}\n")
+            print(f"✅ 위반사례 유사도: {unfair_similarity:.3f}")
+            print(f"✅ 수정본 유사도: {relative_unfairness['fair_similarity']:.3f}")
+            print(f"✅ 위반사례 거리: {relative_unfairness['unfair_distance']:.3f}")
+            print(f"✅ 수정본 거리: {relative_unfairness['fair_distance']:.3f}")
+            print(f"✅ 상대적 불공정도: {relative_unfairness['unfairness_score']:.3f}")
+            print(f"   해석: 입력 문장이 위반사례에 {'가깝습니다' if relative_unfairness['unfairness_score'] > 0.5 else '멀고, 수정본에 가깝습니다'}\n")
             
             # ==================================================================
             # Phase 2: 법률 구조 연결 확인 (Law-Centric)
@@ -207,14 +215,14 @@ class GraphRAGJudge:
             print(f"✅ 중심성: {centrality_score:.3f}\n")
             
             # ==================================================================
-            # Phase 6: 수식 기반 종합 점수 계산
+            # Phase 6: 수식 기반 종합 점수 계산 (개선!)
             # ==================================================================
             print("📍 Phase 6: 수식 기반 종합 점수")
             print("-" * 70)
             
-            formula_score = self._calculate_formula_score(
+            formula_score = self._calculate_formula_score_v2(
                 unfair_similarity=unfair_similarity,
-                fair_similarity=fair_similarity,
+                relative_unfairness=relative_unfairness['unfairness_score'],
                 pattern_json_score=pattern_analysis['pattern_score'],
                 pattern_graph_strength=patterns['strength'],
                 centrality=centrality_score
@@ -232,7 +240,7 @@ class GraphRAGJudge:
                 user_text=user_text,
                 formula_score=formula_score,
                 unfair_similarity=unfair_similarity,
-                fair_similarity=fair_similarity,
+                relative_unfairness=relative_unfairness,
                 pattern_analysis=pattern_analysis,
                 law_structure_info=law_structure_info,
                 best_match=best_match
@@ -284,7 +292,7 @@ class GraphRAGJudge:
             result = {
                 'violation': violation,
                 'severity': severity,
-                'computed_severity': computed_severity,  # 신규!
+                'computed_severity': computed_severity,
                 'confidence': final_score,
                 'confidence_expression': confidence_expression,
                 
@@ -292,21 +300,24 @@ class GraphRAGJudge:
                 'primary_evidence': {
                     'best_match_id': best_case_id,
                     'unfair_similarity': unfair_similarity,
-                    'fair_similarity': fair_similarity,
+                    'fair_similarity': relative_unfairness['fair_similarity'],
+                    'unfair_distance': relative_unfairness['unfair_distance'],
+                    'fair_distance': relative_unfairness['fair_distance'],
+                    'relative_unfairness': relative_unfairness['unfairness_score'],
                     'article_id': law_structure_info['article'],
                     'hang': law_structure_info.get('hang'),
                     'ho': law_structure_info.get('ho'),
                 },
                 
-                # 그래프 컨텍스트 (변경: Keyword 구조)
+                # 그래프 컨텍스트
                 'graph_context': {
                     'similar_cases_count': len(neighborhood['similar_cases']),
                     'related_laws': [law.get('id', '') for law in neighborhood['related_laws']],
                     'keywords': [
                         {
                             'text': kw.get('text', ''),
-                            'case_count': kw.get('case_count', 0),  # 변경!
-                            'prevalence': kw.get('prevalence', 0.0),  # 신규!
+                            'case_count': kw.get('case_count', 0),
+                            'prevalence': kw.get('prevalence', 0.0),
                             'risk_level': kw.get('risk_level', 'medium')
                         }
                         for kw in neighborhood['keywords']
@@ -343,7 +354,7 @@ class GraphRAGJudge:
                 ),
                 
                 # 메타데이터
-                'method': 'graphrag_v5_with_case_count',
+                'method': 'graphrag_v6_relative_distance',
                 'top_similar_cases': [
                     {
                         'id': case['metadata']['id'],
@@ -364,6 +375,151 @@ class GraphRAGJudge:
         finally:
             self._delete_temp_node(temp_node_id)
             print(f"🧹 임시 노드 삭제\n")
+    
+    # ======================================================================
+    # 핵심 개선: 상대적 거리 기반 불공정도 계산
+    # ======================================================================
+    
+    def _calculate_relative_unfairness(
+        self,
+        user_text: str,
+        best_unfair_case_id: str,
+        unfair_similarity: float
+    ) -> Dict:
+        """
+        [핵심 개선] 상대적 거리 기반 불공정도 계산
+        
+        기존 방식 (잘못됨):
+            fair_penalty = 1 - fair_similarity
+            → 위반사례와의 관계 무시
+        
+        올바른 방식:
+            불공정도 = 1 - (위반거리 / (위반거리 + 수정거리))
+            
+        해석:
+            - 위반사례에 가까울수록 → 불공정도 ↑ (1에 가까움)
+            - 수정본에 가까울수록 → 불공정도 ↓ (0에 가까움)
+        
+        Returns:
+            {
+                'fair_similarity': float,      # 수정본과의 유사도
+                'unfair_distance': float,      # 위반사례와의 거리
+                'fair_distance': float,        # 수정본과의 거리
+                'unfairness_score': float      # 상대적 불공정도 [0, 1]
+            }
+        """
+        # 1️⃣ 수정본 텍스트 가져오기
+        query = """
+        MATCH (v:ViolationCase {id: $case_id})
+        RETURN v.corrected_text as corrected_text
+        """
+        
+        result = self.conn.execute_query(query, {'case_id': best_unfair_case_id})
+        
+        if not result or not result[0].get('corrected_text'):
+            # 수정본이 없으면 위반사례 유사도만 사용
+            return {
+                'fair_similarity': 0.0,
+                'unfair_distance': 1.0 - unfair_similarity,
+                'fair_distance': 1.0,
+                'unfairness_score': unfair_similarity
+            }
+        
+        corrected_text = result[0]['corrected_text']
+        
+        if not corrected_text or corrected_text.strip() == '':
+            return {
+                'fair_similarity': 0.0,
+                'unfair_distance': 1.0 - unfair_similarity,
+                'fair_distance': 1.0,
+                'unfairness_score': unfair_similarity
+            }
+        
+        # 2️⃣ 임베딩 계산
+        user_emb = self.rag.local_embeddings.encode([user_text])[0]
+        corrected_emb = self.rag.local_embeddings.encode([corrected_text])[0]
+        
+        # 3️⃣ 수정본과의 유사도
+        fair_similarity = float(np.dot(user_emb, corrected_emb) / (
+            np.linalg.norm(user_emb) * np.linalg.norm(corrected_emb)
+        ))
+        
+        # 4️⃣ 거리 계산 (유사도 → 거리 변환)
+        unfair_distance = 1.0 - unfair_similarity  # 위반사례와의 거리
+        fair_distance = 1.0 - fair_similarity      # 수정본과의 거리
+        
+        # 5️⃣ 상대적 불공정도 계산
+        total_distance = unfair_distance + fair_distance
+        
+        if total_distance < 1e-6:  # 거의 0이면
+            # 양쪽 모두 매우 가까움 → 위반사례 유사도 사용
+            unfairness_score = unfair_similarity
+        else:
+            # 핵심 공식!
+            unfairness_score = 1.0 - (unfair_distance / total_distance)
+        
+        # 6️⃣ 범위 제한 [0, 1]
+        unfairness_score = max(0.0, min(1.0, unfairness_score))
+        
+        return {
+            'fair_similarity': fair_similarity,
+            'unfair_distance': unfair_distance,
+            'fair_distance': fair_distance,
+            'unfairness_score': unfairness_score
+        }
+    
+    # ======================================================================
+    # 수식 기반 점수 계산 (개선!)
+    # ======================================================================
+    
+    def _calculate_formula_score_v2(
+        self,
+        unfair_similarity: float,
+        relative_unfairness: float,
+        pattern_json_score: float,
+        pattern_graph_strength: float,
+        centrality: float
+    ) -> float:
+        """
+        [개선] 수식 기반 점수 계산 - 상대적 불공정도 반영
+        
+        기존:
+            fair_penalty = 1 - fair_similarity (잘못됨)
+        
+        개선:
+            relative_unfairness = 1 - (unfair_dist / (unfair_dist + fair_dist))
+        
+        가중치:
+            - 위반사례 유사도: 30%
+            - 상대적 불공정도: 30%  ← 핵심 개선!
+            - JSON 패턴: 25%
+            - 그래프 중심성: 10%
+            - 그래프 패턴: 5%
+        """
+        weights = {
+            'unfair': 0.30,           # 위반사례 유사도
+            'relative': 0.30,         # 상대적 불공정도 (신규!)
+            'pattern_json': 0.25,     # JSON 패턴
+            'centrality': 0.10,       # 그래프 중심성
+            'pattern_graph': 0.05     # 그래프 패턴
+        }
+        
+        formula_score = (
+            unfair_similarity * weights['unfair'] +
+            relative_unfairness * weights['relative'] +
+            pattern_json_score * weights['pattern_json'] +
+            centrality * weights['centrality'] +
+            pattern_graph_strength * weights['pattern_graph']
+        )
+        
+        print(f"  점수 구성:")
+        print(f"    - 위반사례 유사도 ({weights['unfair']:.0%}): {unfair_similarity:.3f} → {unfair_similarity * weights['unfair']:.3f}")
+        print(f"    - 상대적 불공정도 ({weights['relative']:.0%}): {relative_unfairness:.3f} → {relative_unfairness * weights['relative']:.3f}")
+        print(f"    - JSON 패턴 ({weights['pattern_json']:.0%}): {pattern_json_score:.3f} → {pattern_json_score * weights['pattern_json']:.3f}")
+        print(f"    - 그래프 중심성 ({weights['centrality']:.0%}): {centrality:.3f} → {centrality * weights['centrality']:.3f}")
+        print(f"    - 그래프 패턴 ({weights['pattern_graph']:.0%}): {pattern_graph_strength:.3f} → {pattern_graph_strength * weights['pattern_graph']:.3f}")
+        
+        return formula_score
     
     # ======================================================================
     # 신규/수정 메서드 (Graph Builder v2 반영)
@@ -440,7 +596,7 @@ class GraphRAGJudge:
         Returns:
             {
                 'common_keywords': [...],
-                'keyword_case_counts': {...},  # 변경!
+                'keyword_case_counts': {...},
                 'top_keywords': [...],
                 'strength': float,
                 'pattern_consistency': float
@@ -454,7 +610,7 @@ class GraphRAGJudge:
         for kw in neighborhood.get('keywords', []):
             if kw:
                 keyword_text = kw.get('text', '')
-                case_count = kw.get('case_count', 1)  # 변경: frequency → case_count
+                case_count = kw.get('case_count', 1)
                 if keyword_text:
                     keyword_case_counts[keyword_text] = case_count
         
@@ -478,14 +634,13 @@ class GraphRAGJudge:
         # 패턴 강도: case_count 반영
         if top_keywords:
             total_case_count = sum(count for _, count in top_keywords)
-            # 50개 이상 사례 = 1.0
             pattern_strength = min(total_case_count / 50.0, 1.0)
         else:
             pattern_strength = pattern_analysis['pattern_score']
         
         return {
             'common_keywords': [kw for kw, _ in top_keywords],
-            'keyword_case_counts': dict(top_keywords),  # 변경!
+            'keyword_case_counts': dict(top_keywords),
             'top_keywords': [(kw, count) for kw, count in top_keywords[:3]],
             'strength': pattern_strength,
             'pattern_consistency': 0.8
@@ -498,11 +653,6 @@ class GraphRAGJudge:
     ) -> Dict:
         """
         [수정] 임시 노드 주변 탐색 - Keyword 노드 구조 변경 반영
-        
-        Keyword 노드 속성 변경:
-        - frequency → case_count
-        - importance → prevalence
-        - percentage 신규 추가
         """
         # 유사 사례 연결
         for case in similar_cases[:5]:
@@ -521,7 +671,7 @@ class GraphRAGJudge:
                 'similarity': similarity
             })
         
-        # 주변 탐색 (Keyword 노드 속성 포함!)
+        # 주변 탐색
         query = """
         MATCH (t:TempNode {id: $temp_id})-[:TEMP_SIMILAR]->(v:ViolationCase)
         
@@ -553,7 +703,6 @@ class GraphRAGJudge:
         
         data = result[0]
         
-        # keywords 필터링 (None 제거)
         keywords = [kw for kw in data.get('keywords', []) if kw and kw.get('text')]
         
         return {
@@ -564,12 +713,7 @@ class GraphRAGJudge:
     
     def _analyze_with_patterns(self, user_text: str) -> Dict:
         """
-        [수정] patterns_by_article_v2.json 패턴 분석
-        
-        정규표현식 지원 추가:
-        - 문자열 매칭
-        - 정규표현식 매칭
-        - 복합 패턴 체크
+        [수정] patterns_by_article_v2.json 패턴 분석 (정규표현식 지원)
         """
         if not self.patterns:
             return {
@@ -584,10 +728,9 @@ class GraphRAGJudge:
         article_scores = {}
         combined_patterns_found = []
         
-        # 1️⃣ 범용 위험 키워드 (문자열 + 정규식)
+        # 1️⃣ 범용 위험 키워드
         universal = self.patterns.get('universal_risk_keywords', {})
         
-        # 문자열 매칭
         if 'keywords' in universal:
             for kw_info in universal['keywords']:
                 keyword = kw_info['keyword']
@@ -600,7 +743,6 @@ class GraphRAGJudge:
                         'method': 'string'
                     })
         
-        # 정규식 매칭
         if 'regex_patterns' in universal:
             for pattern_info in universal['regex_patterns']:
                 if re.search(pattern_info['regex'], user_text):
@@ -622,7 +764,6 @@ class GraphRAGJudge:
             article_data = self.patterns[article_id]
             article_score = 0.0
             
-            # 문자열 패턴
             for pattern in article_data.get('patterns', []):
                 high_risk_matched = 0
                 for kw in pattern.get('high_risk_keywords', []):
@@ -646,7 +787,6 @@ class GraphRAGJudge:
                 if normal_matched > 0:
                     article_score += normal_matched * 0.1
             
-            # 정규식 패턴
             if 'regex_patterns' in article_data:
                 for pattern_info in article_data['regex_patterns']:
                     if re.search(pattern_info['regex'], user_text):
@@ -668,10 +808,8 @@ class GraphRAGJudge:
             for pattern in combined['patterns']:
                 keywords = pattern['combination']
                 
-                # 모든 키워드 매칭 확인 (정규식 지원)
                 all_matched = True
                 for kw in keywords:
-                    # 정규식 패턴 찾기
                     regex_pattern = self._find_regex_for_keyword(kw)
                     
                     if regex_pattern:
@@ -748,14 +886,12 @@ class GraphRAGJudge:
         if not self.patterns:
             return None
         
-        # 범용 패턴
         universal = self.patterns.get('universal_risk_keywords', {})
         if 'regex_patterns' in universal:
             for pattern_info in universal['regex_patterns']:
                 if pattern_info['keyword'] == keyword:
                     return pattern_info['regex']
         
-        # 조항별 패턴
         for article_id in ['제6조', '제7조', '제8조', '제9조', '제10조', 
                           '제11조', '제12조', '제13조', '제14조']:
             
@@ -772,7 +908,7 @@ class GraphRAGJudge:
         return None
     
     # ======================================================================
-    # 기존 메서드들 (일부 수정)
+    # 기존 메서드들
     # ======================================================================
     
     def _get_confidence_expression(self, score: float) -> str:
@@ -795,7 +931,7 @@ class GraphRAGJudge:
         user_text: str,
         formula_score: float,
         unfair_similarity: float,
-        fair_similarity: float,
+        relative_unfairness: Dict,
         pattern_analysis: Dict,
         law_structure_info: Dict,
         best_match: Dict
@@ -804,12 +940,13 @@ class GraphRAGJudge:
         evidence_parts = []
         
         evidence_parts.append(f"수식 기반 점수: {formula_score:.3f}")
-        evidence_parts.append(f"불공정 사례 유사도: {unfair_similarity:.3f}")
-        evidence_parts.append(f"공정 사례 유사도: {fair_similarity:.3f}")
+        evidence_parts.append(f"위반사례 유사도: {unfair_similarity:.3f}")
+        evidence_parts.append(f"수정본 유사도: {relative_unfairness['fair_similarity']:.3f}")
+        evidence_parts.append(f"상대적 불공정도: {relative_unfairness['unfairness_score']:.3f}")
         
         if pattern_analysis['matched_keywords']:
             matched_kw = ', '.join([
-                f"{kw['keyword']}({kw['method']})"  # method 추가
+                f"{kw['keyword']}({kw['method']})"
                 for kw in pattern_analysis['matched_keywords'][:5]
             ])
             evidence_parts.append(f"매칭 키워드: {matched_kw}")
@@ -844,7 +981,6 @@ class GraphRAGJudge:
             response = self.rag.llm.invoke(prompt)
             content = response.content
             
-            # 점수 추출
             score_match = re.search(r'조정점수:\s*([\d.]+)', content)
             if score_match:
                 adjusted_score = float(score_match.group(1))
@@ -852,7 +988,6 @@ class GraphRAGJudge:
             else:
                 adjusted_score = formula_score
             
-            # 추론 추출
             reasoning_match = re.search(r'추론:\s*(.+?)(?:\n\n|\Z)', content, re.DOTALL)
             if reasoning_match:
                 reasoning = reasoning_match.group(1).strip()
@@ -870,32 +1005,6 @@ class GraphRAGJudge:
                 'adjusted_score': formula_score,
                 'reasoning': "LLM 추론 실패, 수식 점수 사용"
             }
-    
-    def _search_fair_cases(self, user_text: str, best_unfair_case_id: str) -> float:
-        """공정 사례(수정본) 유사도 계산"""
-        query = """
-        MATCH (v:ViolationCase {id: $case_id})
-        RETURN v.corrected_text as corrected_text
-        """
-        
-        result = self.conn.execute_query(query, {'case_id': best_unfair_case_id})
-        
-        if not result or not result[0].get('corrected_text'):
-            return 0.0
-        
-        corrected_text = result[0]['corrected_text']
-        
-        if not corrected_text or corrected_text.strip() == '':
-            return 0.0
-        
-        user_emb = self.rag.local_embeddings.encode([user_text])[0]
-        corrected_emb = self.rag.local_embeddings.encode([corrected_text])[0]
-        
-        similarity = np.dot(user_emb, corrected_emb) / (
-            np.linalg.norm(user_emb) * np.linalg.norm(corrected_emb)
-        )
-        
-        return float(similarity)
     
     def _analyze_law_structure(self, case_id: str) -> Dict:
         """Law-Centric 구조 분석"""
@@ -990,42 +1099,6 @@ class GraphRAGJudge:
             'full_path': full_path if full_path else 'Unknown'
         }
     
-    def _calculate_formula_score(
-        self,
-        unfair_similarity: float,
-        fair_similarity: float,
-        pattern_json_score: float,
-        pattern_graph_strength: float,
-        centrality: float
-    ) -> float:
-        """수식 기반 점수 계산"""
-        weights = {
-            'unfair': 0.40,
-            'pattern_json': 0.30,
-            'fair': 0.15,
-            'centrality': 0.10,
-            'pattern_graph': 0.05
-        }
-        
-        fair_penalty = (1.0 - fair_similarity)
-        
-        formula_score = (
-            unfair_similarity * weights['unfair'] +
-            pattern_json_score * weights['pattern_json'] +
-            fair_penalty * weights['fair'] +
-            centrality * weights['centrality'] +
-            pattern_graph_strength * weights['pattern_graph']
-        )
-        
-        print(f"  점수 구성:")
-        print(f"    - 불공정 유사도 ({weights['unfair']:.0%}): {unfair_similarity:.3f} → {unfair_similarity * weights['unfair']:.3f}")
-        print(f"    - JSON 패턴 ({weights['pattern_json']:.0%}): {pattern_json_score:.3f} → {pattern_json_score * weights['pattern_json']:.3f}")
-        print(f"    - 공정 페널티 ({weights['fair']:.0%}): {fair_similarity:.3f} → {fair_penalty * weights['fair']:.3f}")
-        print(f"    - 그래프 중심성 ({weights['centrality']:.0%}): {centrality:.3f} → {centrality * weights['centrality']:.3f}")
-        print(f"    - 그래프 패턴 ({weights['pattern_graph']:.0%}): {pattern_graph_strength:.3f} → {pattern_graph_strength * weights['pattern_graph']:.3f}")
-        
-        return formula_score
-    
     def _fallback_judgment_with_patterns(self, pattern_analysis: Dict, user_text: str) -> Dict:
         """유사 사례 없을 때 패턴만으로 판단"""
         pattern_score = pattern_analysis['pattern_score']
@@ -1046,7 +1119,7 @@ class GraphRAGJudge:
         return {
             'violation': violation,
             'severity': severity,
-            'computed_severity': severity,  # 신규
+            'computed_severity': severity,
             'confidence': pattern_score,
             'confidence_expression': confidence_expression,
             'reason': f'패턴 분석: {len(pattern_analysis["matched_keywords"])}개 위험 키워드',
@@ -1277,6 +1350,7 @@ if __name__ == "__main__":
     print(f"확신도: {result['confidence']:.3f}")
     print(f"심각도: {result['severity']} (계산: {result['computed_severity']})")
     print(f"위반 조항: {result['law_structure']['full_path']}")
+    print(f"상대적 불공정도: {result['primary_evidence']['relative_unfairness']:.3f}")
     print(f"설명: {result['explanation']}")
     
     conn.close()
