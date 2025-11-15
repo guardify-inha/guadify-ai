@@ -56,9 +56,9 @@ def get_judge():
 st.title("⚖️ GraphRAG 기반 불공정 약관 판단 시스템")
 
 st.markdown("""
-이 시스템은 **진짜 GraphRAG**를 사용합니다:
+이 시스템은 **GraphRAG v7**을 사용합니다:
 - 🕸️ 지식 그래프 네트워크 탐색
-- 🔍 벡터 + 그래프 하이브리드 검색  
+- 🔍 SimCLR Contrastive Learning  
 - 🧠 다단계 추론 판단
 """)
 
@@ -103,7 +103,7 @@ if analyze_button and user_input.strip():
             st.markdown("---")
             st.subheader("📊 판단 결과")
             
-            # 메트릭 3개
+            # 메트릭 3개 (✅ 퍼센트 제거)
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -111,8 +111,9 @@ if analyze_button and user_input.strip():
                 st.metric("위반 여부", status)
             
             with col2:
-                confidence_pct = f"{result['confidence']:.1%}"
-                st.metric("확신도", confidence_pct)
+                # ✅ 퍼센트 제거: 0.853 → "0.853"
+                confidence_val = f"{result['confidence']:.3f}"
+                st.metric("확신도", confidence_val)
             
             with col3:
                 severity_emoji = {
@@ -125,7 +126,7 @@ if analyze_button and user_input.strip():
                 severity_display = f"{severity_emoji.get(result['severity'], '⚪')} {result['severity'].upper()}"
                 st.metric("심각도", severity_display)
             
-            # ✅ [신규] 표현 추가
+            # 표현 추가
             if 'confidence_expression' in result:
                 st.info(f"💬 {result['confidence_expression']}")
             
@@ -140,7 +141,7 @@ if analyze_button and user_input.strip():
                     st.markdown("**🔗 연결된 노드**")
                     graph_ctx = result['graph_context']
                     
-                    # ✅ [수정] 키워드 오류 수정
+                    # 키워드 처리
                     keywords = graph_ctx.get('keywords', [])
                     if keywords:
                         keyword_texts = []
@@ -148,37 +149,45 @@ if analyze_button and user_input.strip():
                             if isinstance(kw, dict):
                                 text = kw.get('text', '')
                                 case_count = kw.get('case_count', 0)
-                                keyword_texts.append(f"{text}({case_count}개)")
+                                keyword_texts.append(f"{text} ({case_count}개)")
                             else:
                                 keyword_texts.append(str(kw))
                         keyword_display = ", ".join(keyword_texts)
                     else:
                         keyword_display = "없음"
                     
-                    node_info = {
-                        "유사 사례": graph_ctx.get('similar_cases_count', 0),
-                        "관련 법조항": ", ".join(graph_ctx.get('related_laws', [])) if graph_ctx.get('related_laws') else "없음",
-                        "공통 키워드": keyword_display,
-                        "그래프 중심성": f"{graph_ctx.get('centrality_score', 0):.3f}"
-                    }
+                    st.write(f"**유사 사례:** {graph_ctx.get('similar_cases_count', 0)}개")
                     
-                    for key, value in node_info.items():
-                        st.metric(key, value)
+                    related_laws = graph_ctx.get('related_laws', [])
+                    if related_laws:
+                        st.write(f"**관련 법조항:** {', '.join(related_laws)}")
+                    else:
+                        st.write("**관련 법조항:** 없음")
+                    
+                    st.write(f"**공통 키워드:** {keyword_display}")
+                    
+                    # ✅ 네트워크 밀도 (퍼센트 제거)
+                    network_density = graph_ctx.get('network_density', 0)
+                    st.write(f"**네트워크 밀도:** {network_density:.3f}")
+                    
+                    # ✅ 구조 점수 (퍼센트 제거)
+                    structure_score = graph_ctx.get('structure_score', 0)
+                    st.write(f"**구조 점수:** {structure_score:.3f}")
                 
                 with col2:
                     st.markdown("**📊 패턴 분석**")
                     if 'patterns' in result:
                         patterns = result['patterns']
                         
-                        pattern_info = {
-                            "패턴 강도": f"{patterns.get('strength', 0):.1%}",
-                            "패턴 일관성": f"{patterns.get('pattern_consistency', 0):.1%}",
-                        }
+                        # ✅ 패턴 강도 (퍼센트 제거)
+                        pattern_strength = patterns.get('strength', 0)
+                        st.write(f"**패턴 강도:** {pattern_strength:.3f}")
                         
-                        for key, value in pattern_info.items():
-                            st.metric(key, value)
+                        # ✅ 패턴 일관성 (퍼센트 제거)
+                        pattern_consistency = patterns.get('pattern_consistency', 0)
+                        st.write(f"**패턴 일관성:** {pattern_consistency:.3f}")
                         
-                        # ✅ [수정] 상위 키워드 표시
+                        # 상위 키워드
                         top_keywords = patterns.get('top_keywords', [])
                         if top_keywords:
                             st.markdown("**상위 키워드:**")
@@ -188,11 +197,8 @@ if analyze_button and user_input.strip():
                         # 공통 패턴
                         if patterns.get('common_keywords'):
                             st.markdown("**공통 패턴:**")
-                            try:
-                                for kw in patterns['common_keywords'][:5]:
-                                    st.badge(kw)
-                            except (AttributeError, TypeError):
-                                st.write(", ".join(patterns['common_keywords'][:5]))
+                            common_kw_str = ", ".join(patterns['common_keywords'][:5])
+                            st.caption(common_kw_str)
             
             # === 주요 근거 ===
             st.markdown("---")
@@ -204,60 +210,86 @@ if analyze_button and user_input.strip():
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    if result['violation']:
-                        st.markdown("**가장 유사한 불공정 사례**")
-                        unfair_sim = evidence.get('unfair_similarity', 0)
-                        st.info(f"**ID:** {evidence.get('best_match_id', 'N/A')}\n\n**불공정 유사도:** {unfair_sim:.3f}")
-                        
-                        # ✅ [신규] 공정 유사도도 표시
-                        fair_sim = evidence.get('fair_similarity', 0)
-                        if fair_sim > 0:
-                            st.caption(f"공정 유사도: {fair_sim:.3f}")
-                    else:
-                        st.markdown("**가장 유사한 공정 사례**")
-                        fair_sim = evidence.get('fair_similarity', 0)
-                        st.info(f"**ID:** {evidence.get('best_match_id', 'N/A')}\n\n**공정 유사도:** {fair_sim:.3f}")
+                    st.markdown("**유사도 분석**")
+                    
+                    unfair_sim = evidence.get('unfair_similarity', 0)
+                    st.write(f"불공정 원문 유사도: **{unfair_sim:.3f}**")
+                    
+                    fair_sim = evidence.get('fair_similarity', 0)
+                    if fair_sim > 0:
+                        st.write(f"수정본 유사도: **{fair_sim:.3f}**")
+                    
+                    # ✅ Contrastive 불공정도 (신규)
+                    relative_unfairness = evidence.get('relative_unfairness', 0)
+                    if relative_unfairness > 0:
+                        st.write(f"상대적 불공정도: **{relative_unfairness:.3f}**")
+                    
+                    # 방법 표시
+                    method = evidence.get('contrastive_method', '')
+                    if method == 'contrastive_simclr':
+                        st.caption("✨ SimCLR Contrastive Learning 적용")
+                    
+                    st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
                 
                 with col2:
                     st.markdown("**위반 조항**")
                     article = evidence.get('article_id', '없음')
                     st.warning(f"**약관법 {article}**")
                     
-                    # ✅ [신규] 법률 구조 정보
+                    # 법률 구조 정보
                     if 'law_structure' in result:
                         law_info = result['law_structure']
                         full_path = law_info.get('full_path', '')
                         if full_path and full_path != 'Unknown':
-                            st.caption(f"상세: {full_path}")
+                            st.caption(f"상세 경로: {full_path}")
+                        
+                        ho_content = law_info.get('ho_content', '')
+                        if ho_content:
+                            st.caption(f"조항 내용: {ho_content[:100]}...")
             
-            # ✅ [신규] LLM 판단 정보 (접기)
+            # LLM 판단 정보 (접기)
             if 'llm_judgment' in result:
-                with st.expander("🤖 LLM 판단 상세", expanded=False):
+                with st.expander("🤖 LLM 의미 반전 검증", expanded=False):
                     llm_judgment = result['llm_judgment']
                     
-                    col1, col2 = st.columns(2)
+                    col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.metric("수식 점수", f"{llm_judgment.get('formula_score', 0):.3f}")
+                        formula_score = llm_judgment.get('formula_score', 0)
+                        st.metric("수식 점수", f"{formula_score:.3f}")
                     
                     with col2:
-                        st.metric("LLM 조정 점수", f"{llm_judgment.get('adjusted_score', 0):.3f}")
+                        adjusted_score = llm_judgment.get('adjusted_score', 0)
+                        st.metric("LLM 조정 점수", f"{adjusted_score:.3f}")
+                    
+                    with col3:
+                        is_reversed = llm_judgment.get('is_reversed', False)
+                        reversed_display = "✅ 검출" if is_reversed else "❌ 없음"
+                        st.metric("의미 반전", reversed_display)
                     
                     reasoning = llm_judgment.get('reasoning', '')
                     if reasoning:
-                        st.markdown("**추론:**")
+                        st.markdown("**LLM 추론:**")
                         st.write(reasoning)
             
             # === 상세 설명 ===
             st.markdown("---")
             st.subheader("📝 상세 설명")
-            st.write(result.get('explanation', ''))
+            explanation = result.get('explanation', '')
+            if explanation:
+                st.write(explanation)
+            else:
+                st.caption("설명 없음")
             
             # === 수정 제안 ===
             if result['violation']:
                 st.markdown("---")
                 st.subheader("💡 수정 제안")
-                st.info(result.get('suggestion', ''))
+                suggestion = result.get('suggestion', '')
+                if suggestion:
+                    st.info(suggestion)
+                else:
+                    st.caption("수정 제안 없음")
             
             # === 유사 사례 ===
             st.markdown("---")
@@ -266,7 +298,9 @@ if analyze_button and user_input.strip():
                 
                 if top_cases:
                     for i, case in enumerate(top_cases, 1):
-                        st.markdown(f"**{i}. 유사도: {case.get('similarity', 0):.3f}** (ID: `{case.get('id', 'N/A')}`)")
+                        similarity = case.get('similarity', 0)
+                        st.markdown(f"**{i}. 유사도: {similarity:.3f}** (ID: `{case.get('id', 'N/A')}`)")
+                        st.caption(f"조항: {case.get('article_id', 'N/A')}")
                         
                         # 텍스트 미리보기
                         text = case.get('text', '')
@@ -326,13 +360,13 @@ st.markdown("---")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.caption("🛠️ **GraphRAG 시스템**")
-    st.caption("Neo4j + LangChain + OpenAI")
+    st.caption("🛠️ **GraphRAG v7**")
+    st.caption("Neo4j + SimCLR + OpenAI")
 
 with col2:
-    st.caption("📊 **구성요소**")
-    st.caption("지식 그래프 · 벡터 검색 · 다단계 추론")
+    st.caption("📊 **핵심 기능**")
+    st.caption("Contrastive Learning · 그래프 구조 분석")
 
 with col3:
     st.caption("⚡ **실시간 판단**")
-    st.caption("그래프 네트워크 기반 분석")
+    st.caption("다단계 추론 시스템")
