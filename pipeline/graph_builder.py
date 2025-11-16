@@ -10,6 +10,7 @@ CSV 데이터를 Law-Centric GraphRAG로 변환하는 파이프라인
 6. frequency → case_count 변경 (사례 등장 수 기반)
 7. 중주제/소주제 계층 구조 지원
 8. ✨ 정규표현식 기반 키워드 추출 추가 (표현 변형 대응)
+9. 🔧 KeyError 수정 (v1.1)
 """
 
 import pandas as pd
@@ -338,7 +339,8 @@ class GraphRAGBuilder:
             # 조항 파싱 (예: "제7조 제2호", "제6조 제2항 제1호")
             parsed = self._parse_legal_article(legal_basis)
             
-            if not parsed['article']:
+            # 🔧 수정: .get() 사용으로 KeyError 방지
+            if not parsed.get('article'):
                 continue
             
             # 연결 대상 노드 찾기 (우선순위: 호 > 항 > 조)
@@ -357,10 +359,23 @@ class GraphRAGBuilder:
         
         예시:
         - "제7조 제2호" → {article: "제7조", ho: "제2호"}
+        - "약관법 제7조 제1호" → {article: "제7조", ho: "제1호"}
         - "제6조 제2항 제1호" → {article: "제6조", hang: "제2항", ho: "제1호"}
         - "제8조" → {article: "제8조"}
         """
-        result = {}
+        # 🔧 수정: 항상 모든 키를 포함하는 딕셔너리 반환 (KeyError 방지)
+        result = {
+            'article': None,
+            'hang': None,
+            'ho': None
+        }
+        
+        # 빈 값 체크
+        if not legal_basis or pd.isna(legal_basis):
+            return result
+        
+        # 문자열로 변환
+        legal_basis = str(legal_basis)
         
         # 조 추출
         article_match = re.search(r'제(\d+)조', legal_basis)

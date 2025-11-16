@@ -401,8 +401,8 @@ class GraphRAGJudge:
 
             - anchor: 사용자 입력 약관
             - negative: 불공정 원문 (라벨: 위반)
-            - positive: 공정 수정본 (라벨: 정상)
-            - τ = 0.07 (논문 Table 1의 최적값)
+            - positive: 공정 수정본 (라벨: 정상)s
+            - τ = 0.7
         
         
         해석:
@@ -475,7 +475,7 @@ class GraphRAGJudge:
             'fair_similarity': fair_similarity,           # positive와의 유사도
             'unfair_similarity': unfair_similarity,       # negative와의 유사도
             'unfairness_score': unfairness_score,         # P(negative)
-            'temperature': self.TEMPERATURE,              # τ = 0.07
+            'temperature': self.TEMPERATURE,              # τ = 0.7
             'method': 'supervised_contrastive_learning',
             'interpretation': interpretation,
             'paper': 'Gunel et al. (2021), ICLR'
