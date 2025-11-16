@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 import os
 import json
+import pandas as pd
 
 # 프로젝트 루트 추가
 PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
@@ -23,6 +24,7 @@ except Exception:
 from database.neo4j_connector import Neo4jConnector
 from rag.hybrid_graphrag import HybridGraphRAG
 from judge.graphrag_judge import GraphRAGJudge
+from judge.article_violation_scorer import ArticleViolationScorer
 
 # 페이지 설정
 st.set_page_config(
@@ -34,20 +36,23 @@ st.set_page_config(
 # 전역 초기화 (캐싱)
 @st.cache_resource
 def get_judge():
-    """GraphRAG Judge 초기화 - 한번만 실행"""
-    
+    """GraphRAG Judge 및 Article Scorer 초기화 - 한번만 실행"""
+
     print("--- [Cache Miss] 🚀 GraphRAG 시스템 초기화를 시작합니다... ---")
-    
+
     try:
         conn = Neo4jConnector()
-        
+
         rag = HybridGraphRAG(
             driver=conn.driver,
             openai_api_key=os.getenv('OPENAI_API_KEY', '')
         )
-        
-        return GraphRAGJudge(rag, conn)
-    
+
+        judge = GraphRAGJudge(rag, conn)
+        scorer = ArticleViolationScorer()
+
+        return judge, scorer
+
     except Exception as e:
         st.error(f"❌ GraphRAG 초기화 실패: {e}")
         st.stop()
@@ -94,8 +99,12 @@ with st.sidebar:
 if analyze_button and user_input.strip():
     with st.spinner("🧠 GraphRAG로 다단계 분석 중..."):
         try:
-            judge = get_judge()
-            
+            judge, scorer = get_judge()
+
+            # 조항별 위반도 점수 계산
+            article_scores = scorer.calculate_article_scores(user_input)
+            primary_violation = scorer.get_primary_violation(article_scores)
+
             # 판단 실행
             result = judge.judge_clause(user_input)
             
@@ -199,7 +208,93 @@ if analyze_button and user_input.strip():
                             st.markdown("**공통 패턴:**")
                             common_kw_str = ", ".join(patterns['common_keywords'][:5])
                             st.caption(common_kw_str)
-            
+
+            # === 조항별 위반도 분석 ===
+            st.markdown("---")
+            st.subheader("⚖️ 조항별 위반도 분석 (패턴 기반)")
+
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                # 조항별 점수를 DataFrame으로 변환
+                score_data = []
+                for article, data in article_scores.items():
+                    score_data.append({
+                        '조항': article,
+                        '점수': data['score']
+                    })
+
+                df_scores = pd.DataFrame(score_data).sort_values('점수', ascending=False)
+
+                # Bar chart 표시
+                st.bar_chart(df_scores.set_index('조항')['점수'])
+
+            with col2:
+                st.markdown("**최고 위반 조항**")
+
+                # 임계값 표시
+                threshold = 0.3
+                primary_score = primary_violation['score']
+
+                if primary_score >= threshold:
+                    st.error(f"**{primary_violation['article']}**")
+                    st.metric("위반도", f"{primary_score:.3f}")
+
+                    # 매칭된 패턴 정보
+                    details = primary_violation.get('details', {})
+                    matched_high_risk = details.get('matched_high_risk', [])
+                    matched_regex = details.get('matched_regex', [])
+                    matched_exceptions = details.get('matched_exceptions', [])
+
+                    if matched_high_risk:
+                        st.caption(f"🔴 고위험: {len(matched_high_risk)}개")
+                    if matched_regex:
+                        st.caption(f"🔍 패턴: {len(matched_regex)}개")
+                    if matched_exceptions:
+                        st.caption(f"✅ 예외: {len(matched_exceptions)}개")
+                else:
+                    st.success("위반 없음")
+                    st.metric("최고 점수", f"{primary_score:.3f}")
+
+                st.caption(f"임계값: {threshold}")
+
+            # 상세 점수 테이블 (접기)
+            with st.expander("📋 조항별 상세 점수", expanded=False):
+                detailed_data = []
+                for article, data in article_scores.items():
+                    details = data.get('details', {})
+                    detailed_data.append({
+                        '조항': article,
+                        '점수': f"{data['score']:.3f}",
+                        '키워드': len(details.get('matched_keywords', [])),
+                        '고위험': len(details.get('matched_high_risk', [])),
+                        'Regex': len(details.get('matched_regex', [])),
+                        '예외': len(details.get('matched_exceptions', []))
+                    })
+
+                df_detailed = pd.DataFrame(detailed_data).sort_values('점수', ascending=False)
+                st.dataframe(df_detailed, use_container_width=True)
+
+                # 매칭 상세 (최고 점수 조항만)
+                if primary_score >= threshold:
+                    st.markdown(f"**{primary_violation['article']} 매칭 상세:**")
+                    details = primary_violation.get('details', {})
+
+                    if details.get('matched_high_risk'):
+                        st.markdown("🔴 **고위험 키워드:**")
+                        for kw in details['matched_high_risk'][:5]:
+                            st.caption(f"• {kw}")
+
+                    if details.get('matched_regex'):
+                        st.markdown("🔍 **매칭 패턴:**")
+                        for pattern in details['matched_regex'][:5]:
+                            st.caption(f"• {pattern}")
+
+                    if details.get('matched_exceptions'):
+                        st.markdown("✅ **예외 적용:**")
+                        for exc in details['matched_exceptions']:
+                            st.caption(f"• {exc}")
+
             # === 주요 근거 ===
             st.markdown("---")
             st.subheader("📌 주요 근거")
