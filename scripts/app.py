@@ -301,46 +301,28 @@ if analyze_button and user_input.strip():
             
             if 'primary_evidence' in result:
                 evidence = result['primary_evidence']
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**유사도 분석**")
-                    
-                    unfair_sim = evidence.get('unfair_similarity', 0)
-                    st.write(f"불공정 원문 유사도: **{unfair_sim:.3f}**")
-                    
-                    fair_sim = evidence.get('fair_similarity', 0)
-                    if fair_sim > 0:
-                        st.write(f"수정본 유사도: **{fair_sim:.3f}**")
-                    
-                    # ✅ Contrastive 불공정도 (신규)
-                    relative_unfairness = evidence.get('relative_unfairness', 0)
-                    if relative_unfairness > 0:
-                        st.write(f"상대적 불공정도: **{relative_unfairness:.3f}**")
-                    
-                    # 방법 표시
-                    method = evidence.get('contrastive_method', '')
-                    if method == 'contrastive_simclr':
-                        st.caption("✨ SimCLR Contrastive Learning 적용")
-                    
-                    st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
-                
-                with col2:
-                    st.markdown("**위반 조항**")
-                    article = evidence.get('article_id', '없음')
-                    st.warning(f"**약관법 {article}**")
-                    
-                    # 법률 구조 정보
-                    if 'law_structure' in result:
-                        law_info = result['law_structure']
-                        full_path = law_info.get('full_path', '')
-                        if full_path and full_path != 'Unknown':
-                            st.caption(f"상세 경로: {full_path}")
-                        
-                        ho_content = law_info.get('ho_content', '')
-                        if ho_content:
-                            st.caption(f"조항 내용: {ho_content[:100]}...")
+
+                # GraphRAG 유사도 분석만 표시 (조항 정보는 ArticleViolationScorer 섹션에서 표시)
+                st.markdown("**유사도 분석**")
+
+                unfair_sim = evidence.get('unfair_similarity', 0)
+                st.write(f"불공정 원문 유사도: **{unfair_sim:.3f}**")
+
+                fair_sim = evidence.get('fair_similarity', 0)
+                if fair_sim > 0:
+                    st.write(f"수정본 유사도: **{fair_sim:.3f}**")
+
+                # ✅ Contrastive 불공정도 (신규)
+                relative_unfairness = evidence.get('relative_unfairness', 0)
+                if relative_unfairness > 0:
+                    st.write(f"상대적 불공정도: **{relative_unfairness:.3f}**")
+
+                # 방법 표시
+                method = evidence.get('contrastive_method', '')
+                if method == 'contrastive_simclr':
+                    st.caption("✨ SimCLR Contrastive Learning 적용")
+
+                st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
             
             # LLM 판단 정보 (접기)
             if 'llm_judgment' in result:

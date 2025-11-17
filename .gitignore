@@ -43,3 +43,4 @@ node_modules/
 temp_archive/
 
 .env
+IMPROVEMENT_STRATEGY.md
