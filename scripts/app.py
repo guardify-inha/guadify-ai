@@ -169,7 +169,8 @@ if analyze_button and user_input.strip():
                     
                     related_laws = graph_ctx.get('related_laws', [])
                     if related_laws:
-                        st.write(f"**관련 법조항:** {', '.join(related_laws)}")
+                        primary_law = related_laws[0] if isinstance(related_laws, list) else related_laws
+                        st.write(f"**관련 법조항:** {primary_law}")
                     else:
                         st.write("**관련 법조항:** 없음")
                     
