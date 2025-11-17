@@ -39,7 +39,7 @@ class GraphRAGJudge:
         }
         
         # Contrastive Learning 파라미터 (신규)
-        self.TEMPERATURE = 0.7 
+        self.TEMPERATURE = 0.4
         
         # 조항 우선순위 (6조 후순위)
         self.ARTICLE_PRIORITY = {
@@ -402,7 +402,8 @@ class GraphRAGJudge:
             - anchor: 사용자 입력 약관
             - negative: 불공정 원문 (라벨: 위반)
             - positive: 공정 수정본 (라벨: 정상)s
-            - τ = 0.7
+            - τ = 조정중
+            
         
         
         해석:
@@ -475,7 +476,7 @@ class GraphRAGJudge:
             'fair_similarity': fair_similarity,           # positive와의 유사도
             'unfair_similarity': unfair_similarity,       # negative와의 유사도
             'unfairness_score': unfairness_score,         # P(negative)
-            'temperature': self.TEMPERATURE,              # τ = 0.7
+            'temperature': self.TEMPERATURE,              # τ = 조정중
             'method': 'supervised_contrastive_learning',
             'interpretation': interpretation,
             'paper': 'Gunel et al. (2021), ICLR'
