@@ -83,6 +83,9 @@ class GraphRAGJudgeNoLLM(GraphRAGJudge):
 
 
 def main():
+    # 테스트 설정
+    SKIP_PART1 = False  # Part 1 스킵 여부 (True: Part 2만 실행)
+
     # 로그 파일과 콘솔에 동시 출력
     tee = TeeOutput(LOG_FILE)
     original_stdout = sys.stdout
@@ -93,6 +96,8 @@ def main():
         print("AI.csv 데이터 테스트 - LLM 제외 버전")
         print("="*80)
         print(f"📄 전체 로그: {LOG_FILE}\n")
+        if SKIP_PART1:
+            print("⏭️  Part 1 스킵 - Part 2만 실행\n")
 
         # 1. 데이터 로드
         csv_path = project_root / 'data' / 'contracts' / 'reference' / 'ai.csv'
@@ -141,48 +146,49 @@ def main():
         }
 
         # 3. Part 1: 불공정 원문 테스트
-        print("="*80)
-        print(f"Part 1: 불공정 원문 테스트 ({len(df_sample)}개)")
-        print("="*80)
+        if not SKIP_PART1:
+            print("="*80)
+            print(f"Part 1: 불공정 원문 테스트 ({len(df_sample)}개)")
+            print("="*80)
 
-        for idx, row in df_sample.iterrows():
-            text = row['불공정 약관 원문']
+            for idx, row in df_sample.iterrows():
+                text = row['불공정 약관 원문']
 
-            try:
-                print(f"\n[{idx+1}/{len(df_sample)}] 테스트 중...")
-                print(f"   입력: {text[:80]}...")
+                try:
+                    print(f"\n[{idx+1}/{len(df_sample)}] 테스트 중...")
+                    print(f"   입력: {text[:80]}...")
 
-                result = judge.judge_clause(text)
+                    result = judge.judge_clause(text)
 
-                is_violation = result.get('violation', False)
-                confidence = result.get('confidence', 0.0)
-                detected_article = result.get('primary_evidence', {}).get('article_id', None)
+                    is_violation = result.get('violation', False)
+                    confidence = result.get('confidence', 0.0)
+                    detected_article = result.get('primary_evidence', {}).get('article_id', None)
 
-                # TN: 불공정을 불공정으로 판단 (정답)
-                correct = is_violation
+                    # TN: 불공정을 불공정으로 판단 (정답)
+                    correct = is_violation
 
-                results['unfair'].append({
-                    'index': int(idx),
-                    'text': text[:100],
-                    'expected': True,
-                    'predicted': is_violation,
-                    'confidence': confidence,
-                    'detected_article': detected_article,
-                    'correct': correct
-                })
+                    results['unfair'].append({
+                        'index': int(idx),
+                        'text': text[:100],
+                        'expected': True,
+                        'predicted': is_violation,
+                        'confidence': confidence,
+                        'detected_article': detected_article,
+                        'correct': correct
+                    })
 
-                status = "✅" if correct else "❌"
-                print(f"\n{status} 결과: violation={is_violation}, conf={confidence:.3f}, article={detected_article}")
+                    status = "✅" if correct else "❌"
+                    print(f"\n{status} 결과: violation={is_violation}, conf={confidence:.3f}, article={detected_article}")
 
-            except Exception as e:
-                print(f"\n❌ 오류: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                results['unfair'].append({
-                    'index': int(idx),
-                    'text': text[:100],
-                    'error': str(e)
-                })
+                except Exception as e:
+                    print(f"\n❌ 오류: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    results['unfair'].append({
+                        'index': int(idx),
+                        'text': text[:100],
+                        'error': str(e)
+                    })
 
         # 4. Part 2: 공정 수정본 테스트
         print("\n" + "="*80)
@@ -231,6 +237,9 @@ def main():
         print("📊 최종 결과")
         print("="*80)
 
+        if SKIP_PART1:
+            print(f"\n⏭️  Part 1 스킵됨 - Part 2 결과만 분석\n")
+
         # 오류 제거
         unfair_valid = [r for r in results['unfair'] if 'error' not in r]
         fair_valid = [r for r in results['fair'] if 'error' not in r]
@@ -239,7 +248,8 @@ def main():
         fair_errors = len(results['fair']) - len(fair_valid)
 
         print(f"\n에러 발생:")
-        print(f"  Part 1 (불공정): {unfair_errors}개")
+        if not SKIP_PART1:
+            print(f"  Part 1 (불공정): {unfair_errors}개")
         print(f"  Part 2 (공정): {fair_errors}개")
 
         # Confusion Matrix (Fair=Positive, Unfair=Negative)
@@ -271,13 +281,15 @@ def main():
             print(f"  공정 수정본 평균:   {avg_fair:.3f}")
             print(f"  차이 (불공정-공정): {avg_unfair - avg_fair:+.3f}")
 
-            print(f"\nPart 1: 불공정 원문 ({len(unfair_valid)}개)")
-            print(f"  TN (불공정→불공정): {tn}개 ({tn/len(unfair_valid)*100:.1f}%)")
-            print(f"  FP (불공정→공정): {fp}개 ({fp/len(unfair_valid)*100:.1f}%)")
+            if len(unfair_valid) > 0:
+                print(f"\nPart 1: 불공정 원문 ({len(unfair_valid)}개)")
+                print(f"  TN (불공정→불공정): {tn}개 ({tn/len(unfair_valid)*100:.1f}%)")
+                print(f"  FP (불공정→공정): {fp}개 ({fp/len(unfair_valid)*100:.1f}%)")
 
-            print(f"\nPart 2: 공정 수정본 ({len(fair_valid)}개)")
-            print(f"  TP (공정→공정): {tp}개 ({tp/len(fair_valid)*100:.1f}%)")
-            print(f"  FN (공정→불공정): {fn}개 ({fn/len(fair_valid)*100:.1f}%)")
+            if len(fair_valid) > 0:
+                print(f"\nPart 2: 공정 수정본 ({len(fair_valid)}개)")
+                print(f"  TP (공정→공정): {tp}개 ({tp/len(fair_valid)*100:.1f}%)")
+                print(f"  FN (공정→불공정): {fn}개 ({fn/len(fair_valid)*100:.1f}%)")
 
             print(f"\n혼동 행렬 (Fair=Positive):")
             print(f"           예측:공정   예측:불공정")

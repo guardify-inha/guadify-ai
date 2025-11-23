@@ -101,28 +101,37 @@ class GraphRAGJudge:
             top_k=10,
             similarity_threshold=0.6
         )
-        
-        if not similar_cases:
-            return self._fallback_judgment_with_patterns(pattern_analysis, user_text)
-        
-        print(f"✅ {len(similar_cases)}개 유사 사례 발견\n")
-        
-        # 조항 우선순위 고려
-        best_match = self._select_best_match_with_priority(similar_cases)
-        best_case_id = best_match['metadata']['id']
-        unfair_similarity = best_match['similarity_score']
-        
+
         # ==================================================================
         # Phase 2: Prototypical Networks 기반 상대적 불공정도
         # ==================================================================
         print("📍 Phase 2: Prototypical Networks 기반 불공정도 계산")
         print("-" * 70)
-        
-        relative_unfairness = self._calculate_prototypical_unfairness(
-            user_text,
-            similar_cases,  # 여러 사례 전달
-            best_case_id
-        )
+
+        if not similar_cases:
+            # 유사 사례 없음 → DB 전체 prototype 사용 (공정 약관용)
+            relative_unfairness = self._calculate_prototypical_unfairness_from_db(
+                user_text,
+                pattern_analysis
+            )
+            # 조항 정보는 None
+            best_case_id = None
+            best_match = None
+            unfair_similarity = 0.0
+        else:
+            # 유사 사례 있음 → 기존 방식 사용
+            print(f"✅ {len(similar_cases)}개 유사 사례 발견\n")
+
+            # 조항 우선순위 고려
+            best_match = self._select_best_match_with_priority(similar_cases)
+            best_case_id = best_match['metadata']['id']
+            unfair_similarity = best_match['similarity_score']
+
+            relative_unfairness = self._calculate_prototypical_unfairness(
+                user_text,
+                similar_cases,  # 여러 사례 전달
+                best_case_id
+            )
         
         print(f"✅ 방법론: {relative_unfairness['method']}")
         print(f"✅ Unfair prototype 거리: {relative_unfairness.get('unfair_distance', 'N/A')}")
@@ -137,15 +146,25 @@ class GraphRAGJudge:
         # ==================================================================
         print("📍 Phase 3: 법률 구조 분석")
         print("-" * 70)
-        
-        law_structure_info = self._analyze_law_structure(best_case_id)
-        
-        print(f"✅ 위반 조항: {law_structure_info['article']}")
-        if law_structure_info.get('hang'):
-            print(f"   항: {law_structure_info['hang']}")
-        if law_structure_info.get('ho'):
-            print(f"   호: {law_structure_info['ho']}")
-        print(f"   상세: {law_structure_info.get('ho_content', 'N/A')[:100]}...\n")
+
+        if best_case_id is None:
+            # 유사 사례 없음 → 조항 정보 없음
+            law_structure_info = {
+                'article': 'N/A',
+                'hang': None,
+                'ho': None,
+                'ho_content': '유사 사례 없음'
+            }
+            print(f"⏭️  유사 사례 없음 - 조항 분석 스킵\n")
+        else:
+            law_structure_info = self._analyze_law_structure(best_case_id)
+
+            print(f"✅ 위반 조항: {law_structure_info['article']}")
+            if law_structure_info.get('hang'):
+                print(f"   항: {law_structure_info['hang']}")
+            if law_structure_info.get('ho'):
+                print(f"   호: {law_structure_info['ho']}")
+            print(f"   상세: {law_structure_info.get('ho_content', 'N/A')[:100]}...\n")
         
         # ==================================================================
         # Phase 4: 간소화된 수식 기반 종합 점수 계산
@@ -288,7 +307,93 @@ class GraphRAGJudge:
     # ======================================================================
     # 핵심: Prototypical Networks (개선)
     # ======================================================================
-    
+
+    def _calculate_prototypical_unfairness_from_db(
+        self,
+        user_text: str,
+        pattern_analysis: Dict
+    ) -> Dict:
+        """
+        데이터베이스 임베딩을 직접 사용한 Prototypical Networks 계산
+        similar_cases가 없을 때 사용 (공정 약관 판단용)
+        """
+
+        print("✅ 유사 사례 없음 - 전체 데이터베이스 prototype 사용\n")
+
+        # 1. 데이터베이스에서 랜덤 샘플링으로 prototypes 생성
+        query = """
+        MATCH (v:ViolationCase)
+        WHERE v.embedding_violation IS NOT NULL
+          AND v.embedding_corrected IS NOT NULL
+        WITH v
+        ORDER BY rand()
+        LIMIT 50
+        RETURN v.embedding_violation as unfair_emb,
+               v.embedding_corrected as fair_emb
+        """
+
+        results = self.conn.execute_query(query)
+
+        if not results or len(results) < 10:
+            # Fallback: 패턴만 사용
+            pattern_score = pattern_analysis['pattern_score']
+            return {
+                'unfair_distance': 'N/A',
+                'fair_distance': 'N/A',
+                'unfairness_score': pattern_score,
+                'temperature': None,
+                'method': 'pattern_only_fallback',
+                'interpretation': 'DB 프로토타입 없음 - 패턴만 사용'
+            }
+
+        # 2. 사용자 텍스트 임베딩
+        user_embedding = np.array(self.rag.local_embeddings.embed_query(user_text))
+
+        # 3. Unfair prototype: embedding_violation들의 평균
+        unfair_embeddings = [np.array(r['unfair_emb']) for r in results if r.get('unfair_emb')]
+        unfair_prototype = np.mean(unfair_embeddings, axis=0)
+
+        # 4. Fair prototype: embedding_corrected들의 평균
+        fair_embeddings = [np.array(r['fair_emb']) for r in results if r.get('fair_emb')]
+        fair_prototype = np.mean(fair_embeddings, axis=0)
+
+        # 5. Squared Euclidean distance 계산
+        dist_to_unfair = float(np.sum((user_embedding - unfair_prototype) ** 2))
+        dist_to_fair = float(np.sum((user_embedding - fair_prototype) ** 2))
+
+        # 6. Temperature-scaled softmax
+        logits = np.array([-dist_to_unfair, -dist_to_fair])
+        scaled_logits = logits / self.TEMPERATURE
+
+        # Numerical stability
+        exp_logits = np.exp(scaled_logits - np.max(scaled_logits))
+        probs = exp_logits / np.sum(exp_logits)
+
+        unfairness_score = float(probs[0])
+        unfairness_score = max(0.0, min(1.0, unfairness_score))
+
+        # 7. 해석
+        distance_ratio = dist_to_unfair / (dist_to_fair + 1e-8)
+
+        if unfairness_score >= 0.7:
+            interpretation = f"불공정 prototype에 매우 가깝습니다 (거리비: {distance_ratio:.2f})"
+        elif unfairness_score >= 0.5:
+            interpretation = f"불공정 영역에 속합니다 (거리비: {distance_ratio:.2f})"
+        elif unfairness_score >= 0.3:
+            interpretation = f"중립 영역입니다 (거리비: {distance_ratio:.2f})"
+        else:
+            interpretation = f"공정 prototype에 가깝습니다 (거리비: {distance_ratio:.2f})"
+
+        return {
+            'unfair_distance': dist_to_unfair,
+            'fair_distance': dist_to_fair,
+            'unfairness_score': unfairness_score,
+            'temperature': self.TEMPERATURE,
+            'method': 'prototypical_networks_from_db',
+            'interpretation': interpretation,
+            'num_prototypes': len(results)
+        }
+
     def _calculate_prototypical_unfairness(
         self,
         user_text: str,

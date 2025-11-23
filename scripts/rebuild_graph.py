@@ -328,10 +328,10 @@ if __name__ == "__main__":
     # Neo4j 연결
     conn = Neo4jConnector()
 
-    # Rebuilder 생성 (fine-tuned 모델 사용)
+    # Rebuilder 생성 (Hugging Face fine-tuned 모델 사용)
     rebuilder = GraphRAGRebuilder(
         neo4j_connector=conn,
-        model_path='./my_fine_tuned_model'  # train_model.py에서 생성한 모델
+        model_path='moksil/bge-m3-korean-contract-finetuned'  # Hugging Face 모델
     )
 
     # 그래프 재구성
