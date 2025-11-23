@@ -304,6 +304,13 @@ class GraphRAGJudge:
         3. Squared Euclidean distance 사용
         """
         
+        # best_match에서 unfair_similarity 가져오기
+        best_match = next((case for case in similar_cases if case['metadata']['id'] == best_unfair_case_id), None)
+        if not best_match:
+            unfair_similarity = similar_cases[0]['similarity_score'] if similar_cases else 0.5
+        else:
+            unfair_similarity = best_match['similarity_score']
+        
         # 1. Fair prototypes 수집 (수정본들)
         query = """
         MATCH (v:ViolationCase)
@@ -316,7 +323,7 @@ class GraphRAGJudge:
         results = self.conn.execute_query(query, {'case_ids': case_ids})
         
         # Fallback: 수정본이 없으면 단일 유사도만 사용
-        if not result or not result[0].get('corrected_text'):
+        if not results or not results[0].get('corrected_text'):
             return {
                 'fair_similarity': 0.0,
                 'unfair_similarity': unfair_similarity,
@@ -326,9 +333,13 @@ class GraphRAGJudge:
                 'interpretation': '수정본 없음 - 단일 유사도 사용'
             }
         
-        corrected_text = result[0]['corrected_text']
+        # 2. Unfair prototypes 수집 (불공정 원문들)
+        unfair_texts = [case['document'].page_content for case in similar_cases[:5]]
         
-        if not corrected_text or corrected_text.strip() == '':
+        # 3. Fair prototypes 수집 (수정본들)
+        fair_texts = [r['fair_text'] for r in results if r.get('fair_text') and r['fair_text'].strip()]
+        
+        if not fair_texts:
             return {
                 'fair_similarity': 0.0,
                 'unfair_similarity': unfair_similarity,
@@ -338,15 +349,22 @@ class GraphRAGJudge:
                 'interpretation': '수정본 없음 - 단일 유사도 사용'
             }
         
-        # 유사도 계산
-        user_emb = self.rag.local_embeddings.embed_query(user_text)
-        corrected_emb = self.rag.local_embeddings.embed_query(corrected_text)
+        # 4. 임베딩 생성
+        user_embedding = np.array(self.rag.local_embeddings.embed_query(user_text))
         
-        # 4. Squared Euclidean distance 계산
+        # Unfair prototype: 여러 unfair 사례의 평균
+        unfair_embeddings = [np.array(self.rag.local_embeddings.embed_query(text)) for text in unfair_texts]
+        unfair_prototype = np.mean(unfair_embeddings, axis=0) if unfair_embeddings else user_embedding
+        
+        # Fair prototype: 여러 fair 사례의 평균
+        fair_embeddings = [np.array(self.rag.local_embeddings.embed_query(text)) for text in fair_texts]
+        fair_prototype = np.mean(fair_embeddings, axis=0) if fair_embeddings else user_embedding
+        
+        # 5. Squared Euclidean distance 계산
         dist_to_unfair = float(np.sum((user_embedding - unfair_prototype) ** 2))
         dist_to_fair = float(np.sum((user_embedding - fair_prototype) ** 2))
         
-        # 5. Temperature-scaled softmax
+        # 6. Temperature-scaled softmax
         # d(x, c) = ||x - c||^2 이므로 logit은 -d(x, c)
         logits = np.array([-dist_to_unfair, -dist_to_fair])
         scaled_logits = logits / self.TEMPERATURE
@@ -358,7 +376,7 @@ class GraphRAGJudge:
         unfairness_score = float(probs[0])
         unfairness_score = max(0.0, min(1.0, unfairness_score))
         
-        # 6. 해석
+        # 7. 해석
         distance_ratio = dist_to_unfair / (dist_to_fair + 1e-8)
         
         if unfairness_score >= 0.7:
