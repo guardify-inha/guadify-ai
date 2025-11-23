@@ -321,9 +321,9 @@ class GraphRAGJudge:
         
         case_ids = [case['metadata']['id'] for case in similar_cases[:5]]
         results = self.conn.execute_query(query, {'case_ids': case_ids})
-        
+
         # Fallback: 수정본이 없으면 단일 유사도만 사용
-        if not results or not results[0].get('corrected_text'):
+        if not results or not results[0].get('fair_text'):
             return {
                 'fair_similarity': 0.0,
                 'unfair_similarity': unfair_similarity,
