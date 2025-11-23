@@ -250,11 +250,26 @@ def main():
 
         total = tp + tn + fp + fn
 
+        # 신뢰도 점수 평균 계산
+        unfair_confidences = [r['confidence'] for r in unfair_valid]
+        fair_confidences = [r['confidence'] for r in fair_valid]
+        all_confidences = unfair_confidences + fair_confidences
+
+        avg_all = sum(all_confidences) / len(all_confidences) if all_confidences else 0
+        avg_unfair = sum(unfair_confidences) / len(unfair_confidences) if unfair_confidences else 0
+        avg_fair = sum(fair_confidences) / len(fair_confidences) if fair_confidences else 0
+
         if total > 0:
             accuracy = (tp + tn) / total
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0
             f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+
+            print(f"\n📈 신뢰도 점수 평균:")
+            print(f"  전체 평균:          {avg_all:.3f}")
+            print(f"  불공정 원문 평균:   {avg_unfair:.3f}")
+            print(f"  공정 수정본 평균:   {avg_fair:.3f}")
+            print(f"  차이 (불공정-공정): {avg_unfair - avg_fair:+.3f}")
 
             print(f"\nPart 1: 불공정 원문 ({len(unfair_valid)}개)")
             print(f"  TN (불공정→불공정): {tn}개 ({tn/len(unfair_valid)*100:.1f}%)")
@@ -288,7 +303,7 @@ def main():
                 'sample_size': len(df_sample),
                 'total_tests': len(df_sample) * 2,
                 'method': 'GraphRAGJudge (No LLM)',
-                'threshold': 0.55,
+                'threshold': 0.65,
                 'llm_excluded': ['Phase 6 (의미 반전)', 'Phase 8 (설명)', '수정 제안']
             },
             'errors': {
@@ -303,6 +318,12 @@ def main():
                 'precision': precision,
                 'recall': recall,
                 'f1_score': f1
+            },
+            'confidence_averages': {
+                'overall': avg_all,
+                'unfair_cases': avg_unfair,
+                'fair_cases': avg_fair,
+                'difference': avg_unfair - avg_fair
             },
             'results': results
         }
