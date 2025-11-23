@@ -315,36 +315,32 @@ class GraphRAGJudge:
         case_ids = [case['metadata']['id'] for case in similar_cases[:5]]
         results = self.conn.execute_query(query, {'case_ids': case_ids})
         
-        if not results:
-            # Fallback: 단일 사례만 사용
-            return self._calculate_single_case_unfairness(user_text, best_unfair_case_id)
+        # Fallback: 수정본이 없으면 단일 유사도만 사용
+        if not result or not result[0].get('corrected_text'):
+            return {
+                'fair_similarity': 0.0,
+                'unfair_similarity': unfair_similarity,
+                'unfairness_score': unfair_similarity,
+                'temperature': None,
+                'method': 'single_similarity_fallback',
+                'interpretation': '수정본 없음 - 단일 유사도 사용'
+            }
         
-        # 2. 임베딩 생성
-        user_embedding = self.rag.local_embeddings.encode([user_text])[0]
+        corrected_text = result[0]['corrected_text']
         
-        unfair_embeddings = []
-        fair_embeddings = []
+        if not corrected_text or corrected_text.strip() == '':
+            return {
+                'fair_similarity': 0.0,
+                'unfair_similarity': unfair_similarity,
+                'unfairness_score': unfair_similarity,
+                'temperature': None,
+                'method': 'single_similarity_fallback',
+                'interpretation': '수정본 없음 - 단일 유사도 사용'
+            }
         
-        for result in results:
-            unfair_text = result.get('unfair_text', '')
-            fair_text = result.get('fair_text', '')
-            
-            if unfair_text:
-                unfair_embeddings.append(
-                    self.rag.local_embeddings.encode([unfair_text])[0]
-                )
-            
-            if fair_text and fair_text.strip():
-                fair_embeddings.append(
-                    self.rag.local_embeddings.encode([fair_text])[0]
-                )
-        
-        if not unfair_embeddings or not fair_embeddings:
-            return self._calculate_single_case_unfairness(user_text, best_unfair_case_id)
-        
-        # 3. Prototype 생성 (평균)
-        unfair_prototype = np.mean(unfair_embeddings, axis=0)
-        fair_prototype = np.mean(fair_embeddings, axis=0)
+        # 유사도 계산
+        user_emb = self.rag.local_embeddings.embed_query(user_text)
+        corrected_emb = self.rag.local_embeddings.embed_query(corrected_text)
         
         # 4. Squared Euclidean distance 계산
         dist_to_unfair = float(np.sum((user_embedding - unfair_prototype) ** 2))

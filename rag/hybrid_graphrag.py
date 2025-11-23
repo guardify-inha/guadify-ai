@@ -8,6 +8,7 @@ LangChain + Neo4j GraphRAG 통합
 from neo4j import GraphDatabase
 from langchain_core.prompts import PromptTemplate # 👈 PromptTemplate 경로 수정
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 # 👇 Neo4j 관련 모듈은 모두 'langchain_neo4j'에서 가져옵니다.
 from langchain_neo4j import (
@@ -18,7 +19,6 @@ from langchain_neo4j import (
 
 from typing import List, Dict, Any
 import numpy as np
-from sentence_transformers import SentenceTransformer
 # --- [수정] 여기까지 덮어쓰세요 ---
 
 
@@ -61,19 +61,37 @@ class HybridGraphRAG:
         
         # 임베딩 모델
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-        self.local_embeddings = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        self.local_embeddings = HuggingFaceEmbeddings(
+            model_name='paraphrase-multilingual-MiniLM-L12-v2'
+        )
         
         # 벡터 스토어 (Neo4j Vector Index)
+        # retrieval_query로 id를 명시적으로 포함
+        retrieval_query = """
+        RETURN node.original_text + ' ' + coalesce(node.violation_reason, '') AS text,
+               score,
+               {
+                   id: node.id,
+                   article_id: node.article_id,
+                   category: node.category,
+                   subcategory: node.subcategory,
+                   company: node.company,
+                   corrected_text: node.corrected_text,
+                   year: node.year,
+                   other_legal_basis: node.other_legal_basis
+               } AS metadata
+        """
+
         try:
             self.vector_store = Neo4jVector.from_existing_graph(
-                self.embeddings,
+                self.local_embeddings,
                 url=self.neo4j_uri,
                 username=self.neo4j_user,
                 password=self.neo4j_password,
                 index_name="violation_embeddings",
                 node_label="ViolationCase",
-                text_node_properties=["original_text", "violation_reason"],
-                embedding_node_property="embedding"
+                embedding_node_property="embedding",
+                retrieval_query=retrieval_query
             )
         except Exception as e:
             print(f"⚠️ 벡터 스토어 초기화 실패: {e}")
@@ -161,7 +179,7 @@ Cypher 쿼리만 반환하세요 (설명 없이):
     def _fallback_search(self, query_text: str, top_k: int) -> List[Dict]:
         """벡터 스토어 실패 시 폴백 검색"""
         # 로컬 임베딩으로 검색
-        query_embedding = self.local_embeddings.encode([query_text])[0]
+        query_embedding = self.local_embeddings.embed_query(query_text)
         
         # Neo4j에서 모든 사례 가져오기
         query = """
