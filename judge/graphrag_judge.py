@@ -28,8 +28,8 @@ class GraphRAGJudge:
         # 임계값 설정
         self.THRESHOLDS = {
             'high_risk': 0.85,
-            'medium_risk': 0.70,
-            'low_risk': 0.55,
+            'medium_risk': 0.80,
+            'low_risk': 0.75,
         }
         
         # Prototypical Networks 파라미터
@@ -489,9 +489,9 @@ class GraphRAGJudge:
         - 15%: JSON 패턴 점수
         """
         weights = {
-            'unfair': 0.50,
-            'relative': 0.35,
-            'pattern_json': 0.15
+            'unfair': 0.2,
+            'relative': 0.6,
+            'pattern_json': 0.2
         }
         
         formula_score = (

@@ -85,12 +85,13 @@ class HybridGraphRAG:
         try:
             self.vector_store = Neo4jVector.from_existing_graph(
                 self.local_embeddings,
+                "ViolationCase",
+                "embedding",
+                ["original_text", "violation_reason"],
                 url=self.neo4j_uri,
                 username=self.neo4j_user,
                 password=self.neo4j_password,
                 index_name="violation_embeddings",
-                node_label="ViolationCase",
-                embedding_node_property="embedding",
                 retrieval_query=retrieval_query
             )
         except Exception as e:
