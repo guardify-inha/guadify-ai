@@ -61,9 +61,24 @@ class HybridGraphRAG:
         
         # 임베딩 모델
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-        self.local_embeddings = HuggingFaceEmbeddings(
-            model_name='paraphrase-multilingual-MiniLM-L12-v2'
-        )
+
+        # 로컬 임베딩 (BAAI/bge-m3 또는 fine-tuned)
+        from sentence_transformers import SentenceTransformer
+        embedding_model = os.getenv('EMBEDDING_MODEL', 'BAAI/bge-m3')
+        self.local_model = SentenceTransformer(embedding_model)
+
+        # LangChain 호환성을 위한 래퍼
+        class EmbeddingWrapper:
+            def __init__(self, model):
+                self.model = model
+
+            def embed_query(self, text):
+                return self.model.encode(text, normalize_embeddings=True).tolist()
+
+            def embed_documents(self, texts):
+                return self.model.encode(texts, normalize_embeddings=True).tolist()
+
+        self.local_embeddings = EmbeddingWrapper(self.local_model)
         
         # 벡터 스토어 (Neo4j Vector Index)
         # retrieval_query로 id를 명시적으로 포함
@@ -86,7 +101,7 @@ class HybridGraphRAG:
             self.vector_store = Neo4jVector.from_existing_graph(
                 self.local_embeddings,
                 "ViolationCase",
-                "embedding",
+                "embedding_violation",  # 이중 임베딩: violation
                 ["original_text", "violation_reason"],
                 url=self.neo4j_uri,
                 username=self.neo4j_user,
@@ -185,8 +200,8 @@ Cypher 쿼리만 반환하세요 (설명 없이):
         # Neo4j에서 모든 사례 가져오기
         query = """
         MATCH (v:ViolationCase)
-        RETURN v.id as id, v.original_text as text, 
-               v.article_id as article_id, v.embedding as embedding
+        RETURN v.id as id, v.original_text as text,
+               v.article_id as article_id, v.embedding_violation as embedding
         LIMIT 100
         """
         

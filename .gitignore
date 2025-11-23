@@ -44,3 +44,5 @@ temp_archive/
 
 .env
 IMPROVEMENT_STRATEGY.md
+
+data/test/*
