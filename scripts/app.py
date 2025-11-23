@@ -1,5 +1,5 @@
 """
-GraphRAG 기반 불공정 약관 판단 시스템 - Streamlit UI
+GraphRAG 기반 불공정 약관 판단 시스템 - Streamlit UI (v8.1 Compatible)
 """
 import streamlit as st
 import sys
@@ -61,10 +61,10 @@ def get_judge():
 st.title("⚖️ GraphRAG 기반 불공정 약관 판단 시스템")
 
 st.markdown("""
-이 시스템은 **GraphRAG v7**을 사용합니다:
-- 🕸️ 지식 그래프 네트워크 탐색
-- 🔍 SimCLR Contrastive Learning  
-- 🧠 다단계 추론 판단
+이 시스템은 **GraphRAG v8.1**을 사용합니다:
+- 🔍 Prototypical Networks 불공정도 계산
+- 📊 패턴 기반 위험도 분석  
+- 🧠 LLM 의미 반전 검증
 """)
 
 # 사이드바
@@ -82,7 +82,7 @@ with st.sidebar:
     st.markdown("---")
     
     # 옵션
-    show_graph = st.checkbox("그래프 분석 상세 정보 표시", value=True)
+    show_prototypical = st.checkbox("Prototypical 분석 표시", value=True)
     show_raw = st.checkbox("Raw JSON 표시", value=False)
     
     st.markdown("---")
@@ -112,7 +112,7 @@ if analyze_button and user_input.strip():
             st.markdown("---")
             st.subheader("📊 판단 결과")
             
-            # 메트릭 3개 (✅ 퍼센트 제거)
+            # 메트릭 3개
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -120,7 +120,6 @@ if analyze_button and user_input.strip():
                 st.metric("위반 여부", status)
             
             with col2:
-                # ✅ 퍼센트 제거: 0.853 → "0.853"
                 confidence_val = f"{result['confidence']:.3f}"
                 st.metric("확신도", confidence_val)
             
@@ -139,76 +138,53 @@ if analyze_button and user_input.strip():
             if 'confidence_expression' in result:
                 st.info(f"💬 {result['confidence_expression']}")
             
-            # === 그래프 분석 정보 ===
-            if show_graph and 'graph_context' in result:
-                st.markdown("---")
-                st.subheader("🕸️ 그래프 네트워크 분석")
+            # === Prototypical Networks 분석 (v8.1 전용) ===
+            if show_prototypical and 'primary_evidence' in result:
+                evidence = result['primary_evidence']
                 
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**🔗 연결된 노드**")
-                    graph_ctx = result['graph_context']
+                # Prototypical 정보가 있는지 확인
+                if evidence.get('method') in ['prototypical_networks_multi_prototype', 'prototypical_networks_single_prototype']:
+                    st.markdown("---")
+                    st.subheader("🧬 Prototypical Networks 분석")
                     
-                    # 키워드 처리
-                    keywords = graph_ctx.get('keywords', [])
-                    if keywords:
-                        keyword_texts = []
-                        for kw in keywords[:5]:
-                            if isinstance(kw, dict):
-                                text = kw.get('text', '')
-                                case_count = kw.get('case_count', 0)
-                                keyword_texts.append(f"{text} ({case_count}개)")
-                            else:
-                                keyword_texts.append(str(kw))
-                        keyword_display = ", ".join(keyword_texts)
-                    else:
-                        keyword_display = "없음"
+                    col1, col2 = st.columns(2)
                     
-                    st.write(f"**유사 사례:** {graph_ctx.get('similar_cases_count', 0)}개")
-                    
-                    related_laws = graph_ctx.get('related_laws', [])
-                    if related_laws:
-                        primary_law = related_laws[0] if isinstance(related_laws, list) else related_laws
-                        st.write(f"**관련 법조항:** {primary_law}")
-                    else:
-                        st.write("**관련 법조항:** 없음")
-                    
-                    st.write(f"**공통 키워드:** {keyword_display}")
-                    
-                    # ✅ 네트워크 밀도 (퍼센트 제거)
-                    network_density = graph_ctx.get('network_density', 0)
-                    st.write(f"**네트워크 밀도:** {network_density:.3f}")
-                    
-                    # ✅ 구조 점수 (퍼센트 제거)
-                    structure_score = graph_ctx.get('structure_score', 0)
-                    st.write(f"**구조 점수:** {structure_score:.3f}")
-                
-                with col2:
-                    st.markdown("**📊 패턴 분석**")
-                    if 'patterns' in result:
-                        patterns = result['patterns']
+                    with col1:
+                        st.markdown("**거리 분석**")
                         
-                        # ✅ 패턴 강도 (퍼센트 제거)
-                        pattern_strength = patterns.get('strength', 0)
-                        st.write(f"**패턴 강도:** {pattern_strength:.3f}")
+                        unfair_dist = evidence.get('unfair_distance')
+                        fair_dist = evidence.get('fair_distance')
                         
-                        # ✅ 패턴 일관성 (퍼센트 제거)
-                        pattern_consistency = patterns.get('pattern_consistency', 0)
-                        st.write(f"**패턴 일관성:** {pattern_consistency:.3f}")
+                        if unfair_dist is not None:
+                            st.write(f"Unfair Prototype 거리: **{unfair_dist:.3f}**")
+                        if fair_dist is not None:
+                            st.write(f"Fair Prototype 거리: **{fair_dist:.3f}**")
                         
-                        # 상위 키워드
-                        top_keywords = patterns.get('top_keywords', [])
-                        if top_keywords:
-                            st.markdown("**상위 키워드:**")
-                            for kw, count in top_keywords[:3]:
-                                st.caption(f"• {kw}: {count}개 사례")
+                        distance_ratio = evidence.get('distance_ratio')
+                        if distance_ratio is not None:
+                            st.write(f"거리 비율: **{distance_ratio:.3f}**")
+                    
+                    with col2:
+                        st.markdown("**확률 분석**")
                         
-                        # 공통 패턴
-                        if patterns.get('common_keywords'):
-                            st.markdown("**공통 패턴:**")
-                            common_kw_str = ", ".join(patterns['common_keywords'][:5])
-                            st.caption(common_kw_str)
+                        relative_unfairness = evidence.get('relative_unfairness', 0)
+                        st.write(f"P(Unfair): **{relative_unfairness:.3f}**")
+                        st.write(f"P(Fair): **{1 - relative_unfairness:.3f}**")
+                        
+                        temperature = evidence.get('temperature')
+                        if temperature:
+                            st.caption(f"Temperature τ = {temperature}")
+                        
+                        # Prototype 개수 표시 (multi-prototype인 경우)
+                        num_unfair = evidence.get('num_unfair_prototypes')
+                        num_fair = evidence.get('num_fair_prototypes')
+                        if num_unfair and num_fair:
+                            st.caption(f"사용된 prototype: Unfair {num_unfair}개, Fair {num_fair}개")
+                    
+                    # 해석 표시
+                    interpretation = evidence.get('interpretation', '')
+                    if interpretation:
+                        st.info(f"💡 **해석:** {interpretation}")
 
             # === 조항별 위반도 분석 ===
             st.markdown("---")
@@ -303,27 +279,61 @@ if analyze_button and user_input.strip():
             if 'primary_evidence' in result:
                 evidence = result['primary_evidence']
 
-                # GraphRAG 유사도 분석만 표시 (조항 정보는 ArticleViolationScorer 섹션에서 표시)
+                # 유사도 분석
                 st.markdown("**유사도 분석**")
 
                 unfair_sim = evidence.get('unfair_similarity', 0)
-                st.write(f"불공정 원문 유사도: **{unfair_sim:.3f}**")
+                st.write(f"위반사례 유사도: **{unfair_sim:.3f}**")
 
-                fair_sim = evidence.get('fair_similarity', 0)
-                if fair_sim > 0:
-                    st.write(f"수정본 유사도: **{fair_sim:.3f}**")
-
-                # ✅ Contrastive 불공정도 (신규)
+                # v8.1: fair_similarity는 없고 relative_unfairness만 있음
                 relative_unfairness = evidence.get('relative_unfairness', 0)
                 if relative_unfairness > 0:
-                    st.write(f"상대적 불공정도: **{relative_unfairness:.3f}**")
+                    st.write(f"상대적 불공정도 (P(Unfair)): **{relative_unfairness:.3f}**")
 
                 # 방법 표시
-                method = evidence.get('contrastive_method', '')
-                if method == 'contrastive_simclr':
-                    st.caption("✨ SimCLR Contrastive Learning 적용")
+                method = evidence.get('method', '')
+                if 'prototypical' in method:
+                    st.caption("✨ Prototypical Networks 적용")
+                
+                # 법률 구조 정보
+                st.markdown("**위반 조항**")
+                article_id = evidence.get('article_id', 'Unknown')
+                st.write(f"조항: **{article_id}**")
+                
+                hang = evidence.get('hang')
+                if hang:
+                    st.caption(f"항: {hang}")
+                
+                ho = evidence.get('ho')
+                if ho:
+                    st.caption(f"호: {ho}")
 
                 st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
+            
+            # 패턴 분석 정보 (v8.1에서는 간소화됨)
+            if 'patterns' in result:
+                with st.expander("📊 패턴 분석 상세", expanded=False):
+                    patterns = result['patterns']
+                    
+                    # 위험 키워드
+                    matched_keywords = patterns.get('matched_risk_keywords', [])
+                    if matched_keywords:
+                        st.markdown("**매칭된 위험 키워드:**")
+                        for kw in matched_keywords[:10]:
+                            if isinstance(kw, dict):
+                                keyword = kw.get('keyword', '')
+                                risk_level = kw.get('risk_level', 'unknown')
+                                method = kw.get('method', 'string')
+                                st.caption(f"• {keyword} ({risk_level}, {method})")
+                            else:
+                                st.caption(f"• {kw}")
+                    
+                    # 패턴 기반 위험도
+                    risk_level = patterns.get('risk_level_from_patterns', 'unknown')
+                    st.write(f"패턴 기반 위험도: **{risk_level}**")
+                    
+                    pattern_score = patterns.get('pattern_score', 0)
+                    st.write(f"패턴 점수: **{pattern_score:.3f}**")
             
             # LLM 판단 정보 (접기)
             if 'llm_judgment' in result:
@@ -438,13 +448,13 @@ st.markdown("---")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.caption("🛠️ **GraphRAG v7**")
-    st.caption("Neo4j + SimCLR + OpenAI")
+    st.caption("🛠️ **GraphRAG v8.1**")
+    st.caption("Neo4j + Prototypical Networks + OpenAI")
 
 with col2:
     st.caption("📊 **핵심 기능**")
-    st.caption("Contrastive Learning · 그래프 구조 분석")
+    st.caption("Prototypical Networks · 패턴 분석 · LLM 검증")
 
 with col3:
     st.caption("⚡ **실시간 판단**")
-    st.caption("다단계 추론 시스템")
+    st.caption("3단계 간소화 시스템")
