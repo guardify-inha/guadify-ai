@@ -167,15 +167,34 @@ class GraphRAGJudge:
             print(f"   상세: {law_structure_info.get('ho_content', 'N/A')[:100]}...\n")
         
         # ==================================================================
+        # ==================================================================
+        # Phase 2.5: 🆕 GraphRAG - Law-Centric Network Propagation Score
+        # ==================================================================
+        print("📍 Phase 2.5: 🆕 GraphRAG 네트워크 전파 점수 (실험적)")
+        print("-" * 70)
+        
+        graph_propagation_score = self._calculate_graph_propagation_score(
+            user_text=user_text,
+            similar_cases=similar_cases,
+            best_case_id=best_case_id
+        )
+        
+        print(f"✅ 그래프 네트워크 점수: {graph_propagation_score['score']:.3f}")
+        print(f"   방법: {graph_propagation_score['method']}")
+        print(f"   연결된 케이스 수: {graph_propagation_score.get('connected_cases', 0)}")
+        print(f"   법률 노드 경유 경로: {graph_propagation_score.get('law_paths', 0)}")
+        print(f"   해석: {graph_propagation_score['interpretation']}\n")
+        
         # Phase 4: 간소화된 수식 기반 종합 점수 계산
         # ==================================================================
-        print("📍 Phase 4: 종합 점수 계산 (3가지 요소)")
+        print("📍 Phase 4: 종합 점수 계산 (4가지 요소)")
         print("-" * 70)
         
         formula_score = self._calculate_simplified_score(
             unfair_similarity=unfair_similarity,
             relative_unfairness=relative_unfairness['unfairness_score'],
-            pattern_json_score=pattern_analysis['pattern_score']
+            pattern_json_score=pattern_analysis['pattern_score'],
+            graph_propagation_score=graph_propagation_score['score']  # 🆕 추가
         )
         
         print(f"  최종 수식 점수: {formula_score:.3f}\n")
@@ -263,6 +282,15 @@ class GraphRAGJudge:
                 'matched_risk_keywords': pattern_analysis['matched_keywords'],
                 'risk_level_from_patterns': pattern_analysis['risk_level'],
                 'pattern_score': pattern_analysis['pattern_score'],
+            },
+            
+            # 🆕 GraphRAG 네트워크 분석
+            'graph_propagation': {
+                'score': graph_propagation_score['score'],
+                'method': graph_propagation_score['method'],
+                'connected_cases': graph_propagation_score.get('connected_cases', 0),
+                'law_paths': graph_propagation_score.get('law_paths', 0),
+                'interpretation': graph_propagation_score['interpretation']
             },
             
             # 법률 구조
@@ -583,32 +611,37 @@ class GraphRAGJudge:
         self,
         unfair_similarity: float,
         relative_unfairness: float,
-        pattern_json_score: float
+        pattern_json_score: float,
+        graph_propagation_score: float = 0.0  # 🆕 추가
     ) -> float:
         """
-        간소화된 수식 기반 점수 계산
+        수식 기반 종합 점수 계산 (4가지 요소)
         
         구성:
         - 20%: 위반사례 유사도
-        - 60%: Prototypical 상대적 불공정도
+        - 55%: Prototypical 상대적 불공정도 (60% → 55%)
         - 20%: JSON 패턴 점수
+        - 5%: 🆕 GraphRAG 네트워크 전파 점수 (실험적)
         """
         weights = {
-            'unfair': 0.2,
-            'relative': 0.6,
-            'pattern_json': 0.2
+            'unfair': 0.20,
+            'relative': 0.60,  #그래프 없을때 0.6이었음
+            'pattern_json': 0.10,
+            'graph_propagation': 0.10 
         }
         
         formula_score = (
             unfair_similarity * weights['unfair'] +
             relative_unfairness * weights['relative'] +
-            pattern_json_score * weights['pattern_json']
+            pattern_json_score * weights['pattern_json'] +
+            graph_propagation_score * weights['graph_propagation']  # 🆕 추가
         )
         
         print(f"  점수 구성:")
         print(f"    - 위반사례 유사도 ({weights['unfair']:.0%}): {unfair_similarity:.3f} → {unfair_similarity * weights['unfair']:.3f}")
         print(f"    - Prototypical 불공정도 ({weights['relative']:.0%}): {relative_unfairness:.3f} → {relative_unfairness * weights['relative']:.3f}")
         print(f"    - JSON 패턴 ({weights['pattern_json']:.0%}): {pattern_json_score:.3f} → {pattern_json_score * weights['pattern_json']:.3f}")
+        print(f"    - 🆕 GraphRAG 네트워크 ({weights['graph_propagation']:.0%}): {graph_propagation_score:.3f} → {graph_propagation_score * weights['graph_propagation']:.3f}")
         
         return formula_score
     
@@ -1083,3 +1116,240 @@ class GraphRAGJudge:
             if risk_keywords:
                 return f"위험 키워드 제거/완화: {', '.join(risk_keywords)}"
             return "고의·중과실 책임 명시, 불가항력 구체화"
+    
+    # ======================================================================
+    # 🆕 GraphRAG - Law-Centric Network Propagation Score
+    # ======================================================================
+    
+    def _calculate_graph_propagation_score(
+        self,
+        user_text: str,
+        similar_cases: List[Dict],
+        best_case_id: str
+    ) -> Dict:
+        """
+        🚀 진화된 GraphRAG: Multi-hop Law-Centric Propagation
+        
+        **개선사항:**
+        - :VIOLATES 관계 직접 활용 (이제 관계가 존재함!)
+        - 2-hop 경로 분석: ViolationCase → 법률 노드 → 다른 ViolationCase
+        - 법률 계층 구조 활용
+        - SIMILAR_TO 관계도 함께 고려
+        
+        **방법론:**
+        1. 유사 케이스들이 연결된 법률 노드 찾기 (VIOLATES 관계)
+        2. 해당 법률 노드를 통해 연결된 다른 케이스들 탐색 (2-hop)
+        3. SIMILAR_TO 관계로 추가 연결 확인
+        4. 케이스 밀집도와 법률 계층을 고려한 위험도 계산
+        """
+        if not similar_cases or not best_case_id:
+            return {
+                'score': 0.0,
+                'method': 'no_similar_cases',
+                'connected_cases': 0,
+                'law_paths': 0,
+                'interpretation': '유사 케이스 없음 - 그래프 분석 불가'
+            }
+        
+        try:
+            # ================================================================
+            # Step 1: 유사 케이스들의 조항 ID 수집
+            # ================================================================
+            article_ids = set()
+            case_ids_to_check = []
+            
+            for case in similar_cases[:5]:  # 상위 5개
+                article_id = case['metadata'].get('article_id', '')
+                case_id = case['metadata'].get('id', '')
+                
+                if article_id and article_id != 'Unknown':
+                    article_ids.add(article_id)
+                if case_id:
+                    case_ids_to_check.append(case_id)
+            
+            if not article_ids and not case_ids_to_check:
+                return {
+                    'score': 0.0,
+                    'method': 'no_article_info',
+                    'connected_cases': 0,
+                    'law_paths': 0,
+                    'interpretation': '조항 정보 없음'
+                }
+            
+            # ================================================================
+            # Step 2: Multi-hop 그래프 순회 (진짜 GraphRAG!)
+            # ================================================================
+            
+            # 2-1. VIOLATES 관계를 통한 법률 중심 탐색
+            violates_query = """
+            UNWIND $article_ids AS article_id
+            MATCH (article:조 {id: article_id})
+            
+            // 법률 계층 구조 먼저 수집
+            OPTIONAL MATCH (article)-[:HAS_HANG]->(hang:항)
+            OPTIONAL MATCH (article)-[:HAS_HO]->(ho_direct:호)
+            OPTIONAL MATCH (article)-[:HAS_HANG]->(:항)-[:HAS_HO]->(ho_nested:호)
+            
+            WITH article, 
+                 collect(DISTINCT hang) as hangs,
+                 collect(DISTINCT ho_direct) + collect(DISTINCT ho_nested) as hos
+            
+            // 이제 ViolationCase 찾기
+            OPTIONAL MATCH (v1:ViolationCase)-[:VIOLATES]->(article)
+            OPTIONAL MATCH (v2:ViolationCase)-[:VIOLATES]->(hang_node)
+                WHERE hang_node IN hangs
+            OPTIONAL MATCH (v3:ViolationCase)-[:VIOLATES]->(ho_node)
+                WHERE ho_node IN hos
+            
+            WITH article, hangs, hos,
+                 collect(DISTINCT v1) + collect(DISTINCT v2) + collect(DISTINCT v3) as all_violations
+            
+            RETURN 
+                article.id as article_id,
+                article.title as article_title,
+                size(all_violations) as violation_count,
+                size(hangs) as hang_count,
+                size(hos) as ho_count,
+                CASE 
+                    WHEN size(hangs) > 0 THEN 3
+                    WHEN size(hos) > 0 THEN 2
+                    ELSE 1
+                END as structural_depth
+            """
+            
+            violates_results = self.conn.execute_query(violates_query, {
+                'article_ids': list(article_ids)
+            })
+            
+            # 2-2. SIMILAR_TO 관계를 통한 추가 연결 확인
+            similar_query = """
+            UNWIND $case_ids AS case_id
+            MATCH (v:ViolationCase {id: case_id})
+            
+            // SIMILAR_TO 관계로 연결된 케이스들
+            OPTIONAL MATCH (v)-[:SIMILAR_TO]-(similar:ViolationCase)
+            
+            WITH v, count(DISTINCT similar) as similar_count
+            
+            RETURN 
+                v.id as case_id,
+                similar_count
+            """
+            
+            similar_results = self.conn.execute_query(similar_query, {
+                'case_ids': case_ids_to_check
+            })
+            
+            # ================================================================
+            # Step 3: 점수 계산
+            # ================================================================
+            
+            if not violates_results and not similar_results:
+                return {
+                    'score': 0.0,
+                    'method': 'no_graph_data',
+                    'connected_cases': 0,
+                    'law_paths': 0,
+                    'interpretation': '그래프 연결 없음'
+                }
+            
+            # 3-1. VIOLATES 기반 점수
+            total_violations = 0
+            weighted_density = 0.0
+            max_depth = 0
+            law_path_count = 0
+            
+            for row in violates_results:
+                violation_count = row['violation_count']
+                structural_depth = row['structural_depth']
+                
+                total_violations += violation_count
+                max_depth = max(max_depth, structural_depth)
+                law_path_count += 1
+                
+                # 밀집도: 케이스 수 × 구조 복잡도
+                density = violation_count * (1.0 + structural_depth * 0.15)
+                weighted_density += density
+            
+            # 3-2. SIMILAR_TO 기반 보너스
+            total_similar_connections = sum(r['similar_count'] for r in similar_results)
+            similar_bonus = min(total_similar_connections / 30.0, 0.2)  # 최대 0.2 보너스
+            
+            # 3-3. 최종 점수 계산
+            # ✅ 수정: 변수 초기화 추가
+            normalized_density = 0.0
+            depth_bonus = 0.0
+            
+            if weighted_density > 0:
+                # Log scale 정규화 (부드러운 분포)
+                normalized_density = np.log1p(weighted_density) / np.log1p(100)
+                normalized_density = min(normalized_density, 1.0)
+                
+                # 구조 깊이 보너스
+                depth_bonus = (max_depth - 1) * 0.1  # 최대 0.2
+                
+                # 최종 점수: 밀집도 + 구조 보너스 + 유사도 보너스
+                final_score = min(
+                    normalized_density + depth_bonus + similar_bonus,
+                    1.0
+                )
+                
+                method = 'multi_hop_graphrag'
+            else:
+                # VIOLATES 관계는 없지만 SIMILAR_TO는 있는 경우
+                final_score = similar_bonus
+                method = 'similarity_only'
+            
+            # ================================================================
+            # Step 4: 해석 생성
+            # ================================================================
+            
+            total_connected = total_violations + total_similar_connections
+            
+            if total_violations >= 20:
+                interpretation = f"매우 빈번한 위반 패턴 (법률 경로: {total_violations}개)"
+            elif total_violations >= 10:
+                interpretation = f"일반적인 위반 패턴 (법률 경로: {total_violations}개)"
+            elif total_violations >= 5:
+                interpretation = f"간헐적 위반 패턴 (법률 경로: {total_violations}개)"
+            else:
+                interpretation = f"드문 위반 패턴 (법률 경로: {total_violations}개)"
+            
+            if total_similar_connections > 0:
+                interpretation += f", 유사 연결: {total_similar_connections}개"
+            
+            if max_depth == 3:
+                interpretation += ", 복잡한 구조(조-항-호)"
+            elif max_depth == 2:
+                interpretation += ", 중간 구조(조-호)"
+            elif max_depth == 1:
+                interpretation += ", 단순 구조(조)"
+            
+            return {
+                'score': final_score,
+                'method': method,
+                'connected_cases': total_connected,
+                'law_paths': law_path_count,
+                'interpretation': interpretation,
+                'details': {
+                    'weighted_density': weighted_density,
+                    'normalized_density': normalized_density if weighted_density > 0 else 0,
+                    'structural_depth': max_depth,
+                    'depth_bonus': depth_bonus if weighted_density > 0 else 0,
+                    'similar_bonus': similar_bonus,
+                    'violation_connections': total_violations,
+                    'similar_connections': total_similar_connections
+                }
+            }
+        
+        except Exception as e:
+            print(f"⚠️ 그래프 전파 점수 계산 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'score': 0.0,
+                'method': 'error',
+                'connected_cases': 0,
+                'law_paths': 0,
+                'interpretation': f'계산 오류: {str(e)}'
+            }
