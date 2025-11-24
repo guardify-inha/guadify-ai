@@ -62,9 +62,9 @@ class HybridGraphRAG:
         # 임베딩 모델
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
-        # 로컬 임베딩 (BAAI/bge-m3 또는 fine-tuned)
+        # 로컬 임베딩 (Fine-tuned BAAI/bge-m3)
         from sentence_transformers import SentenceTransformer
-        embedding_model = os.getenv('EMBEDDING_MODEL', 'BAAI/bge-m3')
+        embedding_model = os.getenv('EMBEDDING_MODEL', 'moksil/bge-m3-korean-contract-finetuned')
         self.local_model = SentenceTransformer(embedding_model)
 
         # LangChain 호환성을 위한 래퍼

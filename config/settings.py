@@ -28,9 +28,10 @@ class Settings:
     # 임베딩 모델 설정
     # =========================================================================
     # 환경변수로 모델 전환:
-    # - 기본: 'BAAI/bge-m3' (베이스 모델)
-    # - 파인튜닝 후: './my_fine_tuned_model'
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+    # - 기본: 'moksil/bge-m3-korean-contract-finetuned' (파인튜닝 모델)
+    # - 베이스 모델: 'BAAI/bge-m3'
+    # - 로컬 모델: './my_fine_tuned_model'
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "moksil/bge-m3-korean-contract-finetuned")
     VECTOR_DIMENSION = 1024  # bge-m3 차원
 
     # =========================================================================
