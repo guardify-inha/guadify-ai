@@ -35,3 +35,23 @@ print("✅ Law-Centric GraphRAG 구축 완료!")
 
 # Step 6: 테스트
 streamlit run scripts/app.py
+
+
+
+_____
+finetuning 적용버전 실행순서
+
+
+python main.py (그래프 리셋하려고)
+python scripts/rebuild_graph.py
+python scripts/train_model.py
+
+
+혼동행렬 테스트(학습데이터)
+python scripts/test_ai_csv.py
+
+혼동행렬 테스트(테스트데이터)
+python scripts/test_test_input.py
+
+조항별 테스트?
+python scripts/test_with_test_input.py
