@@ -40,12 +40,12 @@ class GraphRAGRebuilder:
     def __init__(
         self,
         neo4j_connector,
-        model_path='./my_fine_tuned_model'
+        model_path='moksil/bge-m3-korean-contract-finetuned'
     ):
         """
         Args:
             neo4j_connector: Neo4j 커넥터
-            model_path: Fine-tuned 모델 경로 (기본: ./my_fine_tuned_model)
+            model_path: Fine-tuned 모델 경로 (기본: moksil/bge-m3-korean-contract-finetuned)
         """
         self.conn = neo4j_connector
 
@@ -347,10 +347,10 @@ if __name__ == "__main__":
     print("✅ 모든 작업 완료!")
     print("="*80)
     print("\n다음 단계:")
-    print("1. rag/hybrid_graphrag.py 수정:")
-    print("   - 모델 경로를 './my_fine_tuned_model'로 변경")
-    print("   - 임베딩 차원을 1024로 변경")
-    print("   - 인덱스 이름을 'violation_embeddings', 'corrected_embeddings'로 변경")
+    print("1. 시스템 설정 확인:")
+    print("   - .env 파일: EMBEDDING_MODEL=moksil/bge-m3-korean-contract-finetuned")
+    print("   - config/settings.py: 이미 파인튜닝 모델로 설정됨")
+    print("   - rag/hybrid_graphrag.py: 이미 이중 임베딩 지원")
     print("\n2. 테스트 실행:")
-    print("   python3 scripts/test_input_csv.py")
+    print("   python scripts/test_ai_csv.py")
     print()
