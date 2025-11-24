@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 import json
+import re  # 🆕 추가
 
 # 프로젝트 루트
 project_root = Path(__file__).parent.parent
@@ -40,12 +41,12 @@ class GraphRAGRebuilder:
     def __init__(
         self,
         neo4j_connector,
-        model_path='moksil/bge-m3-korean-contract-finetuned'
+        model_path='./my_fine_tuned_model'
     ):
         """
         Args:
             neo4j_connector: Neo4j 커넥터
-            model_path: Fine-tuned 모델 경로 (기본: moksil/bge-m3-korean-contract-finetuned)
+            model_path: Fine-tuned 모델 경로 (기본: ./my_fine_tuned_model)
         """
         self.conn = neo4j_connector
 
@@ -80,7 +81,10 @@ class GraphRAGRebuilder:
             self.patterns = {}
 
     def clear_database(self):
-        """기존 데이터 삭제"""
+        """
+        ⚠️ DEPRECATED: 전체 삭제는 법률 구조를 날립니다!
+        대신 clear_violation_data()를 사용하세요.
+        """
         print("\n" + "="*80)
         print("🗑️  기존 데이터 삭제 중...")
         print("="*80)
@@ -96,6 +100,66 @@ class GraphRAGRebuilder:
             pass
 
         print("✅ 기존 데이터 삭제 완료\n")
+    
+    def clear_violation_data(self):
+        """
+        🎯 ViolationCase 노드만 선택적 삭제 (법률 구조 보존!)
+        
+        삭제 대상:
+        - ViolationCase 노드 및 관련 관계
+        - 벡터 인덱스
+        
+        보존 대상:
+        - 법률 노드 (법률, 조, 항, 호)
+        - HAS_ARTICLE, HAS_HANG, HAS_HO 관계
+        """
+        print("\n" + "="*80)
+        print("🗑️  ViolationCase 데이터만 선택적 삭제 (법률 구조 보존)")
+        print("="*80)
+        
+        # ViolationCase 노드 삭제 전 개수 확인
+        count_query = "MATCH (v:ViolationCase) RETURN count(v) as count"
+        result = self.conn.execute_query(count_query)
+        old_count = result[0]['count'] if result else 0
+        
+        print(f"  - 기존 ViolationCase: {old_count}개")
+        
+        # ViolationCase 노드 및 관련 관계 삭제
+        delete_query = "MATCH (v:ViolationCase) DETACH DELETE v"
+        self.conn.execute_query(delete_query)
+        
+        print(f"  ✅ {old_count}개 ViolationCase 삭제 완료")
+        
+        # 벡터 인덱스 삭제 (에러 무시)
+        try:
+            self.conn.execute_query("DROP INDEX violation_embeddings IF EXISTS")
+            self.conn.execute_query("DROP INDEX corrected_embeddings IF EXISTS")
+            print("  ✅ 벡터 인덱스 삭제 완료")
+        except Exception as e:
+            print(f"  ⚠️  인덱스 삭제 실패 (무시): {e}")
+        
+        # 법률 구조 확인 (보존되었는지 검증)
+        law_check = """
+        MATCH (law:법률) 
+        OPTIONAL MATCH (law)-[:HAS_ARTICLE]->(article:조)
+        OPTIONAL MATCH (article)-[:HAS_HANG]->(hang:항)
+        OPTIONAL MATCH (article)-[:HAS_HO|HAS_HANG*]->(ho:호)
+        RETURN 
+            count(DISTINCT law) as law_count,
+            count(DISTINCT article) as article_count,
+            count(DISTINCT hang) as hang_count,
+            count(DISTINCT ho) as ho_count
+        """
+        
+        law_result = self.conn.execute_query(law_check)
+        if law_result:
+            print("\n  📊 보존된 법률 구조:")
+            print(f"     - 법률: {law_result[0]['law_count']}개")
+            print(f"     - 조: {law_result[0]['article_count']}개")
+            print(f"     - 항: {law_result[0]['hang_count']}개")
+            print(f"     - 호: {law_result[0]['ho_count']}개")
+        
+        print("\n✅ ViolationCase 데이터 삭제 완료 (법률 구조 보존됨)\n")
 
     def create_vector_indexes(self):
         """벡터 인덱스 생성 (이중 인덱스)"""
@@ -240,6 +304,193 @@ class GraphRAGRebuilder:
 
         print(f"✅ {len(df)}개 노드 생성 완료\n")
 
+
+    
+    # =========================================================================
+    # 🆕 관계 생성 메서드들
+    # =========================================================================
+    
+    def create_law_relationships(self, df: pd.DataFrame):
+        """
+        ViolationCase → 법률 노드 (조/항/호) 관계 생성
+        
+        우선순위:
+        1. 호 노드 (가장 구체적)
+        2. 항 노드
+        3. 조 노드
+        """
+        print("  - ViolationCase → 법률 노드 연결 중...")
+        
+        created_count = 0
+        skipped_count = 0
+        
+        for idx, row in tqdm(df.iterrows(), total=len(df), desc="VIOLATES 관계"):
+            case_id = f"CASE_{row.get('_new_id', row.get('ID', idx + 1))}"
+            legal_basis = row.get('근거 조항(약관법)', '')
+            
+            if not legal_basis or pd.isna(legal_basis):
+                skipped_count += 1
+                continue
+            
+            # 조항 파싱
+            parsed = self._parse_legal_article(legal_basis)
+            
+            if not parsed.get('article'):
+                skipped_count += 1
+                continue
+            
+            # 법률 노드 찾기
+            target_node = self._find_law_target_node(
+                parsed['article'],
+                parsed.get('hang'),
+                parsed.get('ho')
+            )
+            
+            if target_node:
+                self._create_violation_relationship(case_id, target_node)
+                created_count += 1
+            else:
+                skipped_count += 1
+        
+        print(f"  ✅ 생성: {created_count}개, 스킵: {skipped_count}개")
+    
+    def _parse_legal_article(self, legal_basis: str) -> Dict:
+        """법조항 문자열 파싱"""
+        result = {
+            'article': None,
+            'hang': None,
+            'ho': None
+        }
+        
+        if not legal_basis or pd.isna(legal_basis):
+            return result
+        
+        legal_basis = str(legal_basis)
+        
+        # 조 추출
+        article_match = re.search(r'제(\d+)조', legal_basis)
+        if article_match:
+            result['article'] = f"제{article_match.group(1)}조"
+        
+        # 항 추출
+        hang_match = re.search(r'제(\d+)항', legal_basis)
+        if hang_match:
+            result['hang'] = f"제{hang_match.group(1)}항"
+        
+        # 호 추출
+        ho_match = re.search(r'제(\d+)호', legal_basis)
+        if ho_match:
+            result['ho'] = f"제{ho_match.group(1)}호"
+        
+        return result
+    
+    def _find_law_target_node(self, article_id: str, hang_id: str = None, ho_id: str = None) -> Dict:
+        """법률 노드 찾기 (우선순위: 호 > 항 > 조)"""
+        # 1. 호 노드 찾기
+        if ho_id:
+            if hang_id:
+                ho_full_id = f"{article_id}_{hang_id}_{ho_id}"
+            else:
+                ho_full_id = f"{article_id}_{ho_id}"
+            
+            query = "MATCH (ho:호 {id: $ho_id}) RETURN ho.id as id LIMIT 1"
+            result = self.conn.execute_query(query, {'ho_id': ho_full_id})
+            
+            if result:
+                return {'type': '호', 'id': result[0]['id']}
+        
+        # 2. 항 노드 찾기
+        if hang_id:
+            hang_full_id = f"{article_id}_{hang_id}"
+            query = "MATCH (hang:항 {id: $hang_id}) RETURN hang.id as id LIMIT 1"
+            result = self.conn.execute_query(query, {'hang_id': hang_full_id})
+            
+            if result:
+                return {'type': '항', 'id': result[0]['id']}
+        
+        # 3. 조 노드 찾기
+        query = "MATCH (article:조 {id: $article_id}) RETURN article.id as id LIMIT 1"
+        result = self.conn.execute_query(query, {'article_id': article_id})
+        
+        if result:
+            return {'type': '조', 'id': result[0]['id']}
+        
+        return None
+    
+    def _create_violation_relationship(self, case_id: str, target_node: Dict):
+        """ViolationCase → 법률 노드 관계 생성"""
+        node_type = target_node['type']
+        node_id = target_node['id']
+        
+        query = f"""
+        MATCH (v:ViolationCase {{id: $case_id}})
+        MATCH (law:{node_type} {{id: $node_id}})
+        MERGE (v)-[:VIOLATES {{
+            confidence: 1.0,
+            method: 'law_centric'
+        }}]->(law)
+        """
+        
+        self.conn.execute_query(query, {
+            'case_id': case_id,
+            'node_id': node_id
+        })
+    
+    def create_similarity_relationships(self, df: pd.DataFrame, embeddings: Dict):
+        """
+        유사도 기반 SIMILAR_TO 관계 생성
+        
+        Args:
+            df: DataFrame
+            embeddings: 임베딩 딕셔너리 (violation 키 사용)
+        """
+        print("  - 유사도 행렬 계산 중...")
+        
+        # violation 임베딩 사용
+        violation_embeddings = embeddings['violation']
+        similarity_matrix = cosine_similarity(violation_embeddings)
+        
+        print("  - SIMILAR_TO 관계 생성 중...")
+        
+        threshold = 0.7
+        top_k = 5
+        
+        created_count = 0
+        
+        for i in tqdm(range(len(df)), desc="SIMILAR_TO 관계"):
+            case_id_1 = f"CASE_{df.iloc[i].get('_new_id', df.iloc[i].get('ID', i + 1))}"
+            
+            # 자기 자신 제외
+            similarities = similarity_matrix[i].copy()
+            similarities[i] = -1
+            
+            top_indices = np.argsort(similarities)[::-1][:top_k]
+            
+            for j in top_indices:
+                if similarities[j] < threshold:
+                    continue
+                
+                case_id_2 = f"CASE_{df.iloc[j].get('_new_id', df.iloc[j].get('ID', j + 1))}"
+                
+                query = """
+                MATCH (v1:ViolationCase {id: $id1})
+                MATCH (v2:ViolationCase {id: $id2})
+                MERGE (v1)-[:SIMILAR_TO {
+                    similarity: $similarity,
+                    method: 'cosine'
+                }]->(v2)
+                """
+                
+                self.conn.execute_query(query, {
+                    'id1': case_id_1,
+                    'id2': case_id_2,
+                    'similarity': float(similarities[j])
+                })
+                
+                created_count += 1
+        
+        print(f"  ✅ {created_count}개 SIMILAR_TO 관계 생성")
+
     def _extract_company_name(self, filename: str) -> str:
         """파일명에서 회사명 추출"""
         if not filename or pd.isna(filename):
@@ -269,53 +520,134 @@ class GraphRAGRebuilder:
         return str(article_text).split()[0] if article_text else "Unknown"
 
     def rebuild_from_multiple_csv(self, csv_paths: List[str]):
-        """여러 CSV에서 그래프 재구성"""
+        """
+        여러 CSV에서 그래프 재구성 (개선됨!)
+        
+        ✅ 개선 사항:
+        1. 임베딩 중복 계산 방지 (1회만 계산)
+        2. 법률 구조 보존 (ViolationCase만 삭제)
+        3. 메모리 효율적 처리
+        """
         print("\n" + "="*80)
-        print("🔄 그래프 재구성 시작")
+        print("🔄 그래프 재구성 시작 (개선 버전)")
         print("="*80)
         print(f"📁 CSV 파일: {len(csv_paths)}개")
         for path in csv_paths:
             print(f"   - {path}")
         print()
 
-        # 1. 기존 데이터 삭제
-        self.clear_database()
+        # =====================================================================
+        # Step 0: 기존 ViolationCase 데이터만 삭제 (법률 구조 보존!)
+        # =====================================================================
+        self.clear_violation_data()
 
-        # 2. 벡터 인덱스 생성
+        # =====================================================================
+        # Step 1: 모든 CSV 로드 및 통합
+        # =====================================================================
+        print("="*80)
+        print("📂 Step 1: CSV 데이터 통합")
+        print("="*80)
+        
+        all_dfs = []
+        for csv_path in csv_paths:
+            print(f"\n  - {csv_path} 로드 중...")
+            df = self.load_and_filter_csv(csv_path)
+            if len(df) > 0:
+                all_dfs.append(df)
+        
+        if not all_dfs:
+            print("❌ 유효한 데이터가 없습니다.")
+            return
+        
+        # 전체 데이터 통합
+        df_combined = pd.concat(all_dfs, ignore_index=True)
+        df_combined['_new_id'] = range(1, len(df_combined) + 1)
+        
+        print(f"\n✅ 총 {len(df_combined)}개 유효한 사례 로드 완료\n")
+
+        # =====================================================================
+        # Step 2: 벡터 인덱스 생성
+        # =====================================================================
         self.create_vector_indexes()
 
-        # 3. CSV별로 처리
-        id_offset = 0
+        # =====================================================================
+        # Step 3: 임베딩 생성 (⚡ 1회만!)
+        # =====================================================================
+        print("="*80)
+        print("🧠 Step 3: 이중 임베딩 생성 (전체 데이터, 1회만)")
+        print("="*80)
+        
+        embeddings = self.generate_dual_embeddings(df_combined)
+        
+        print(f"✅ 임베딩 생성 완료 (재사용 가능)\n")
 
-        for csv_path in csv_paths:
-            # 3-1. CSV 로드
-            df = self.load_and_filter_csv(csv_path)
+        # =====================================================================
+        # Step 4: ViolationCase 노드 생성 (임베딩 재사용)
+        # =====================================================================
+        print("="*80)
+        print("📦 Step 4: ViolationCase 노드 생성")
+        print("="*80)
+        
+        self.create_nodes(df_combined, embeddings, id_offset=0)
+        
+        print(f"✅ {len(df_combined)}개 노드 생성 완료\n")
 
-            if len(df) == 0:
-                print(f"⚠️  {csv_path}: 유효한 데이터 없음, 스킵\n")
-                continue
+        # =====================================================================
+        # Step 5: VIOLATES 관계 생성 (ViolationCase → 법률 노드)
+        # =====================================================================
+        print("="*80)
+        print("⚖️ Step 5: ViolationCase → 법률 노드 관계 생성 (VIOLATES)")
+        print("="*80)
+        
+        self.create_law_relationships(df_combined)
 
-            # 3-2. 이중 임베딩 생성
-            embeddings = self.generate_dual_embeddings(df)
+        # =====================================================================
+        # Step 6: SIMILAR_TO 관계 생성 (임베딩 재사용!)
+        # =====================================================================
+        print("\n" + "="*80)
+        print("🔗 Step 6: 유사도 기반 관계 생성 (SIMILAR_TO)")
+        print("="*80)
+        print("  ⚡ 기존 임베딩 재사용 (추가 계산 없음!)")
+        
+        # ⚡ 임베딩 재사용! 다시 계산하지 않음
+        self.create_similarity_relationships(df_combined, embeddings)
 
-            # 3-3. 노드 생성
-            self.create_nodes(df, embeddings, id_offset=id_offset)
-
-            id_offset += len(df)
-
-            print(f"✅ {csv_path} 처리 완료 (누적: {id_offset}개 노드)\n")
-
-        # 4. 완료
+        # =====================================================================
+        # Step 7: 완료 및 통계
+        # =====================================================================
         print("\n" + "="*80)
         print("🎉 그래프 재구성 완료!")
         print("="*80)
-        print(f"📊 총 {id_offset}개 노드 생성")
+        print(f"📊 총 {len(df_combined)}개 ViolationCase 노드 생성")
         print(f"📊 이중 임베딩 구조:")
         print(f"   - embedding_violation: {self.embedding_dim}차원 (위반 문장)")
         print(f"   - embedding_corrected: {self.embedding_dim}차원 (준수 문장)")
         print(f"\n🔍 벡터 인덱스:")
         print(f"   - violation_embeddings (위반 검색용)")
         print(f"   - corrected_embeddings (준수 검색용)")
+        
+        # 관계 통계
+        print(f"\n📊 그래프 관계:")
+        try:
+            violates_count_query = "MATCH ()-[r:VIOLATES]->() RETURN count(r) as count"
+            violates_result = self.conn.execute_query(violates_count_query)
+            violates_count = violates_result[0]['count'] if violates_result else 0
+            print(f"   - VIOLATES: {violates_count}개")
+            
+            similar_count_query = "MATCH ()-[r:SIMILAR_TO]->() RETURN count(r) as count"
+            similar_result = self.conn.execute_query(similar_count_query)
+            similar_count = similar_result[0]['count'] if similar_result else 0
+            print(f"   - SIMILAR_TO: {similar_count}개")
+            
+            print(f"   - 총 관계: {violates_count + similar_count}개")
+        except Exception as e:
+            print(f"   ⚠️  관계 통계 조회 실패: {e}")
+        
+        print()
+        print("="*80)
+        print("✅ 법률 구조(조/항/호)는 보존되었습니다.")
+        print("✅ 임베딩은 1회만 계산되었습니다. (비용/시간 절약!)")
+        print("="*80)
         print()
 
 
@@ -347,10 +679,10 @@ if __name__ == "__main__":
     print("✅ 모든 작업 완료!")
     print("="*80)
     print("\n다음 단계:")
-    print("1. 시스템 설정 확인:")
-    print("   - .env 파일: EMBEDDING_MODEL=moksil/bge-m3-korean-contract-finetuned")
-    print("   - config/settings.py: 이미 파인튜닝 모델로 설정됨")
-    print("   - rag/hybrid_graphrag.py: 이미 이중 임베딩 지원")
+    print("1. rag/hybrid_graphrag.py 수정:")
+    print("   - 모델 경로를 './my_fine_tuned_model'로 변경")
+    print("   - 임베딩 차원을 1024로 변경")
+    print("   - 인덱스 이름을 'violation_embeddings', 'corrected_embeddings'로 변경")
     print("\n2. 테스트 실행:")
-    print("   python scripts/test_ai_csv.py")
+    print("   python3 scripts/test_input_csv.py")
     print()
