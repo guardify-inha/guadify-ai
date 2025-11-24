@@ -589,9 +589,9 @@ class GraphRAGJudge:
         간소화된 수식 기반 점수 계산
         
         구성:
-        - 50%: 위반사례 유사도
-        - 35%: Prototypical 상대적 불공정도
-        - 15%: JSON 패턴 점수
+        - 20%: 위반사례 유사도
+        - 60%: Prototypical 상대적 불공정도
+        - 20%: JSON 패턴 점수
         """
         weights = {
             'unfair': 0.2,
