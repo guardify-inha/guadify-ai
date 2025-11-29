@@ -1,11 +1,15 @@
 """
 BAAI/bge-m3 모델 파인튜닝 스크립트
-Neo4j에서 데이터를 추출하여 Contrastive Learning으로 학습
+Neo4j에서 데이터를 추출하여 Triplet 기반 Contrastive Learning으로 학습
 
 학습 전략:
 - Anchor: original_text (위반 문장)
 - Positive: 같은 article_id를 가진 다른 위반 문장
-- Negative: 해당 노드의 corrected_text (반대 의미)
+- Hard Negative: 해당 노드의 corrected_text (수정 문장)
+
+Loss Function: MultipleNegativesRankingLoss
+- 라벨 없이 (Anchor, Positive, Hard Negative) Triplet 구조로 학습
+- Anchor가 Negative보다 Positive에 더 가깝게 위치하도록 상대적 거리 학습
 """
 
 import os
@@ -23,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from database.neo4j_connector import Neo4jConnector
-from sentence_transformers import SentenceTransformer, InputExample, losses
+from sentence_transformers import SentenceTransformer, InputExample, losses, evaluation
 from torch.utils.data import DataLoader
 import torch
 
@@ -84,25 +88,29 @@ class ContractViolationDataset:
 
     def create_triplets(self, num_samples_per_case: int = 3) -> List[InputExample]:
         """
-        Triplet 생성 for Contrastive Learning
+        Triplet 생성 for Contrastive Learning (MNRL용)
 
         전략:
         - Anchor: original_text (위반 문장)
-        - Positive: 같은 article_id의 다른 original_text
-        - Negative: 해당 케이스의 corrected_text (반대 의미)
+        - Positive: 같은 article_id의 다른 original_text (없으면 자기 자신)
+        - Hard Negative: 해당 케이스의 corrected_text (수정 문장)
+
+        구조: InputExample(texts=[anchor, positive, hard_negative])
+        - 라벨 없이 3개 문장을 하나의 InputExample로 전달
+        - MultipleNegativesRankingLoss가 상대적 거리를 학습
 
         Args:
             num_samples_per_case: 각 케이스당 생성할 샘플 수
         """
         print("="*80)
-        print("🔄 Training Triplets 생성 중...")
+        print("🔄 Training Triplets 생성 중 (MNRL용)...")
         print("="*80)
 
         examples = []
 
         for case in self.all_data:
             anchor = case['original_text']
-            negative = case['corrected_text']
+            hard_negative = case['corrected_text']
             article_id = case['article_id']
 
             # 같은 조항의 다른 케이스들
@@ -114,27 +122,27 @@ class ContractViolationDataset:
             if not same_article_cases:
                 # Positive를 찾을 수 없으면 자기 자신을 사용 (차선책)
                 positive = anchor
+                
+                # Triplet 구조: [anchor, positive, hard_negative]
+                examples.append(InputExample(
+                    texts=[anchor, positive, hard_negative]
+                    # 라벨 없음 - MultipleNegativesRankingLoss가 상대적 거리 학습
+                ))
             else:
                 # 여러 개의 positive 샘플 생성
                 for _ in range(min(num_samples_per_case, len(same_article_cases))):
                     positive_case = random.choice(same_article_cases)
                     positive = positive_case['original_text']
 
-                    # InputExample: (texts=[anchor, positive], label=1.0)
+                    # Triplet 구조: [anchor, positive, hard_negative]
                     examples.append(InputExample(
-                        texts=[anchor, positive],
-                        label=1.0  # 같은 조항 = 유사
+                        texts=[anchor, positive, hard_negative]
+                        # 라벨 없음 - MultipleNegativesRankingLoss가 상대적 거리 학습
                     ))
 
-                    # Hard Negative도 추가 (corrected_text)
-                    examples.append(InputExample(
-                        texts=[anchor, negative],
-                        label=0.0  # 반대 의미 = 다름
-                    ))
-
-        print(f"✅ {len(examples)}개 Training Examples 생성 완료")
-        print(f"   - Positive pairs: {len([e for e in examples if e.label == 1.0])}개")
-        print(f"   - Negative pairs: {len([e for e in examples if e.label == 0.0])}개")
+        print(f"✅ {len(examples)}개 Triplet Examples 생성 완료")
+        print(f"   - 각 Triplet: [anchor, positive, hard_negative]")
+        print(f"   - 라벨 없음 (MNRL이 상대적 거리 학습)")
         print()
 
         # 셔플
@@ -188,9 +196,24 @@ def train_bge_m3_model(
         return
 
     # 3. Triplets 생성
-    train_examples = dataset.create_triplets(num_samples_per_case=3)
+    all_examples = dataset.create_triplets(num_samples_per_case=3)
 
-    # 4. 모델 로드
+    # 4. Train/Dev 분리 (9:1)
+    print("="*80)
+    print("📊 Train/Dev 데이터 분리 중...")
+    print("="*80)
+    
+    random.shuffle(all_examples)
+    split_idx = int(len(all_examples) * 0.9)
+    train_examples = all_examples[:split_idx]
+    dev_examples = all_examples[split_idx:]
+    
+    print(f"✅ 데이터 분리 완료:")
+    print(f"   - Train: {len(train_examples)}개 ({len(train_examples)/len(all_examples)*100:.1f}%)")
+    print(f"   - Dev: {len(dev_examples)}개 ({len(dev_examples)/len(all_examples)*100:.1f}%)")
+    print()
+
+    # 5. 모델 로드
     print("="*80)
     print(f"🧠 {base_model} 모델 로드 중...")
     print("="*80)
@@ -201,29 +224,48 @@ def train_bge_m3_model(
     print(f"   - 임베딩 차원: {model.get_sentence_embedding_dimension()}차원")
     print()
 
-    # 5. DataLoader 생성
+    # 6. DataLoader 생성
     train_dataloader = DataLoader(
         train_examples,
         shuffle=True,
         batch_size=batch_size
     )
 
-    # 6. Loss Function
-    # CosineSimilarityLoss: (anchor, positive/negative, label) 형태 지원
-    train_loss = losses.CosineSimilarityLoss(model)
+    # 7. Loss Function: MultipleNegativesRankingLoss
+    # Triplet 구조 [anchor, positive, hard_negative]를 입력받아
+    # Anchor가 Negative보다 Positive에 더 가깝게 위치하도록 학습
+    train_loss = losses.MultipleNegativesRankingLoss(model=model)
+
+    # 8. Evaluator: TripletEvaluator
+    print("="*80)
+    print("📈 Evaluator 설정 중...")
+    print("="*80)
+    
+    dev_evaluator = evaluation.TripletEvaluator.from_input_examples(
+        dev_examples,
+        name="contract-violation-dev"
+    )
+    
+    print(f"✅ TripletEvaluator 생성 완료")
+    print(f"   - Dev examples: {len(dev_examples)}개")
+    print()
 
     print("="*80)
     print("🎯 학습 시작")
     print("="*80)
     print(f"📊 Training Examples: {len(train_examples)}개")
+    print(f"📊 Dev Examples: {len(dev_examples)}개")
     print(f"📦 Batches per Epoch: {len(train_dataloader)}개")
+    print(f"🔧 Loss Function: MultipleNegativesRankingLoss")
     print()
 
-    # 7. 학습
+    # 9. 학습
     model.fit(
         train_objectives=[(train_dataloader, train_loss)],
         epochs=num_epochs,
         warmup_steps=warmup_steps,
+        evaluator=dev_evaluator,
+        evaluation_steps=500,  # 500 steps마다 평가
         output_path=output_dir,
         show_progress_bar=True,
         save_best_model=True,

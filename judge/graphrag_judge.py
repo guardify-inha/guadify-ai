@@ -28,8 +28,8 @@ class GraphRAGJudge:
         # 임계값 설정
         self.THRESHOLDS = {
             'high_risk': 0.85,
-            'medium_risk': 0.80,
-            'low_risk': 0.75,
+            'medium_risk': 0.75,
+            'low_risk': 0.65,
         }
         
         # Prototypical Networks 파라미터

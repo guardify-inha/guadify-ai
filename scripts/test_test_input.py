@@ -183,6 +183,21 @@ def main():
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
+        # 신뢰도 점수 평균 계산
+        unfair_confidences = [r['confidence'] for r in valid if r['expected_violation'] is True]
+        fair_confidences = [r['confidence'] for r in valid if r['expected_violation'] is False]
+        all_confidences = unfair_confidences + fair_confidences
+
+        avg_all = sum(all_confidences) / len(all_confidences) if all_confidences else 0
+        avg_unfair = sum(unfair_confidences) / len(unfair_confidences) if unfair_confidences else 0
+        avg_fair = sum(fair_confidences) / len(fair_confidences) if fair_confidences else 0
+
+        print(f"\n📈 신뢰도 점수 평균:")
+        print(f"  전체 평균:          {avg_all:.3f}")
+        print(f"  불공정 문장 평균:   {avg_unfair:.3f}")
+        print(f"  공정 문장 평균:     {avg_fair:.3f}")
+        print(f"  차이 (불공정-공정): {avg_unfair - avg_fair:+.3f}")
+
         print(f"\n혼동 행렬:")
         print(f"           예측:공정   예측:불공정")
         print(f"실제:공정      {tp:3d}         {fn:3d}")
@@ -208,6 +223,12 @@ def main():
                 "precision": precision,
                 "recall": recall,
                 "f1_score": f1
+            },
+            "confidence_averages": {
+                "overall": avg_all,
+                "unfair_cases": avg_unfair,
+                "fair_cases": avg_fair,
+                "difference": avg_unfair - avg_fair
             },
             "results": results
         }

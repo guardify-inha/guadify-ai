@@ -31,7 +31,7 @@ class Settings:
     # - 기본: 'moksil/bge-m3-korean-contract-finetuned' (파인튜닝 모델)
     # - 베이스 모델: 'BAAI/bge-m3'
     # - 로컬 모델: './my_fine_tuned_model'
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "moksil/bge-m3-korean-contract-finetuned")
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     VECTOR_DIMENSION = 1024  # bge-m3 차원
 
     # =========================================================================
@@ -56,8 +56,8 @@ class Settings:
 
     THRESHOLDS = {
         'high_risk': 0.85,
-        'medium_risk': 0.80,
-        'low_risk': 0.75
+        'medium_risk': 0.75,
+        'low_risk': 0.65
     }
 
     # =========================================================================
