@@ -86,9 +86,14 @@ class GraphRAGJudge:
         
         pattern_analysis = self._analyze_with_patterns(user_text)
         
-        print(f"✅ 매칭 키워드: {len(pattern_analysis['matched_keywords'])}개")
-        print(f"   위험도: {pattern_analysis['risk_level']}")
-        print(f"   패턴 점수: {pattern_analysis['pattern_score']:.3f}\n")
+        # pattern_analysis 안전하게 처리
+        matched_count = len(pattern_analysis.get('matched_keywords', [])) if isinstance(pattern_analysis, dict) else 0
+        risk_level = pattern_analysis.get('risk_level', 'unknown') if isinstance(pattern_analysis, dict) else 'unknown'
+        pattern_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
+        
+        print(f"✅ 매칭 키워드: {matched_count}개")
+        print(f"   위험도: {risk_level}")
+        print(f"   패턴 점수: {pattern_score:.3f}\n")
         
         # ==================================================================
         # Phase 1: 불공정 사례 벡터 검색
@@ -124,8 +129,13 @@ class GraphRAGJudge:
 
             # 조항 우선순위 고려
             best_match = self._select_best_match_with_priority(similar_cases)
-            best_case_id = best_match['metadata']['id']
-            unfair_similarity = best_match['similarity_score']
+            # best_match 안전하게 처리
+            if best_match and isinstance(best_match, dict):
+                best_case_id = best_match.get('metadata', {}).get('id') if 'metadata' in best_match else best_match.get('id')
+                unfair_similarity = best_match.get('similarity_score', 0.0)
+            else:
+                best_case_id = None
+                unfair_similarity = 0.0
 
             relative_unfairness = self._calculate_prototypical_unfairness(
                 user_text,
@@ -151,9 +161,11 @@ class GraphRAGJudge:
             # 유사 사례 없음 → 조항 정보 없음
             law_structure_info = {
                 'article': 'N/A',
+                'article_title': '',
                 'hang': None,
                 'ho': None,
-                'ho_content': '유사 사례 없음'
+                'ho_content': '유사 사례 없음',
+                'full_path': 'N/A'
             }
             print(f"⏭️  유사 사례 없음 - 조항 분석 스킵\n")
         else:
@@ -190,11 +202,16 @@ class GraphRAGJudge:
         print("📍 Phase 4: 종합 점수 계산 (4가지 요소)")
         print("-" * 70)
         
+        # 안전하게 값 추출
+        pattern_json_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
+        unfairness_score = relative_unfairness.get('unfairness_score', 0.0) if isinstance(relative_unfairness, dict) else 0.0
+        graph_score = graph_propagation_score.get('score', 0.0) if isinstance(graph_propagation_score, dict) else 0.0
+        
         formula_score = self._calculate_simplified_score(
             unfair_similarity=unfair_similarity,
-            relative_unfairness=relative_unfairness['unfairness_score'],
-            pattern_json_score=pattern_analysis['pattern_score'],
-            graph_propagation_score=graph_propagation_score['score']  # 🆕 추가
+            relative_unfairness=unfairness_score,
+            pattern_json_score=pattern_json_score,
+            graph_propagation_score=graph_score  # 🆕 추가
         )
         
         print(f"  최종 수식 점수: {formula_score:.3f}\n")
@@ -268,29 +285,29 @@ class GraphRAGJudge:
             'primary_evidence': {
                 'best_match_id': best_case_id,
                 'unfair_similarity': unfair_similarity,
-                'unfair_distance': relative_unfairness.get('unfair_distance'),
-                'fair_distance': relative_unfairness.get('fair_distance'),
-                'relative_unfairness': relative_unfairness['unfairness_score'],
-                'method': relative_unfairness['method'],
-                'article_id': law_structure_info['article'],
+                'unfair_distance': relative_unfairness.get('unfair_distance') if isinstance(relative_unfairness, dict) else None,
+                'fair_distance': relative_unfairness.get('fair_distance') if isinstance(relative_unfairness, dict) else None,
+                'relative_unfairness': relative_unfairness.get('unfairness_score', 0.0) if isinstance(relative_unfairness, dict) else 0.0,
+                'method': relative_unfairness.get('method', 'unknown') if isinstance(relative_unfairness, dict) else 'unknown',
+                'article_id': law_structure_info.get('article', 'Unknown'),
                 'hang': law_structure_info.get('hang'),
                 'ho': law_structure_info.get('ho'),
             },
             
             # 패턴 분석
             'patterns': {
-                'matched_risk_keywords': pattern_analysis['matched_keywords'],
-                'risk_level_from_patterns': pattern_analysis['risk_level'],
-                'pattern_score': pattern_analysis['pattern_score'],
+                'matched_risk_keywords': pattern_analysis.get('matched_keywords', []) if isinstance(pattern_analysis, dict) else [],
+                'risk_level_from_patterns': pattern_analysis.get('risk_level', 'unknown') if isinstance(pattern_analysis, dict) else 'unknown',
+                'pattern_score': pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0,
             },
             
             # 🆕 GraphRAG 네트워크 분석
             'graph_propagation': {
-                'score': graph_propagation_score['score'],
-                'method': graph_propagation_score['method'],
-                'connected_cases': graph_propagation_score.get('connected_cases', 0),
-                'law_paths': graph_propagation_score.get('law_paths', 0),
-                'interpretation': graph_propagation_score['interpretation']
+                'score': graph_propagation_score.get('score', 0.0) if isinstance(graph_propagation_score, dict) else 0.0,
+                'method': graph_propagation_score.get('method', 'unknown') if isinstance(graph_propagation_score, dict) else 'unknown',
+                'connected_cases': graph_propagation_score.get('connected_cases', 0) if isinstance(graph_propagation_score, dict) else 0,
+                'law_paths': graph_propagation_score.get('law_paths', 0) if isinstance(graph_propagation_score, dict) else 0,
+                'interpretation': graph_propagation_score.get('interpretation', '') if isinstance(graph_propagation_score, dict) else ''
             },
             
             # 법률 구조
@@ -871,12 +888,37 @@ class GraphRAGJudge:
             evidence_parts.append(f"Unfair 거리: {relative_unfairness['unfair_distance']:.3f}")
             evidence_parts.append(f"Fair 거리: {relative_unfairness['fair_distance']:.3f}")
         
-        if pattern_analysis['matched_keywords']:
-            matched_kw = ', '.join([f"{kw['keyword']}({kw['method']})" for kw in pattern_analysis['matched_keywords'][:5]])
-            evidence_parts.append(f"키워드: {matched_kw}")
+        # pattern_analysis 안전하게 처리
+        if pattern_analysis and isinstance(pattern_analysis, dict):
+            matched_keywords = pattern_analysis.get('matched_keywords', [])
+            if matched_keywords and isinstance(matched_keywords, list):
+                try:
+                    matched_kw_list = []
+                    for kw in matched_keywords[:5]:
+                        if isinstance(kw, dict):
+                            keyword = kw.get('keyword', '')
+                            method = kw.get('method', 'unknown')
+                            if keyword:
+                                matched_kw_list.append(f"{keyword}({method})")
+                        elif isinstance(kw, str):
+                            matched_kw_list.append(kw)
+                    
+                    if matched_kw_list:
+                        matched_kw = ', '.join(matched_kw_list)
+                        evidence_parts.append(f"키워드: {matched_kw}")
+                except Exception as e:
+                    # 키워드 처리 실패 시 무시
+                    pass
         
-        evidence_parts.append(f"조항: {law_structure_info['full_path']}")
-        evidence_parts.append(f"유사사례: {best_match['document'].page_content[:200]}...")
+        evidence_parts.append(f"조항: {law_structure_info.get('full_path', 'Unknown')}")
+        
+        # best_match 안전하게 처리
+        try:
+            if best_match and isinstance(best_match, dict) and 'document' in best_match:
+                doc_content = best_match['document'].page_content[:200] if hasattr(best_match['document'], 'page_content') else str(best_match.get('document', ''))[:200]
+                evidence_parts.append(f"유사사례: {doc_content}...")
+        except Exception:
+            evidence_parts.append("유사사례: 정보 없음")
         
         evidence = '\n'.join(evidence_parts)
 
@@ -1056,16 +1098,42 @@ class GraphRAGJudge:
         
         context_parts.append(f"판단: {confidence_expression}")
         
-        if pattern_analysis['matched_keywords']:
-            matched_kw = ', '.join([
-                f"{kw['keyword']}({kw['risk_level']},{kw['method']})"
-                for kw in pattern_analysis['matched_keywords'][:5]
-            ])
-            context_parts.append(f"위험 키워드: {matched_kw}")
+        # pattern_analysis 안전하게 처리
+        if pattern_analysis and isinstance(pattern_analysis, dict):
+            matched_keywords = pattern_analysis.get('matched_keywords', [])
+            if matched_keywords and isinstance(matched_keywords, list):
+                try:
+                    matched_kw_list = []
+                    for kw in matched_keywords[:5]:
+                        if isinstance(kw, dict):
+                            keyword = kw.get('keyword', '')
+                            risk_level = kw.get('risk_level', 'unknown')
+                            method = kw.get('method', 'unknown')
+                            if keyword:
+                                matched_kw_list.append(f"{keyword}({risk_level},{method})")
+                        elif isinstance(kw, str):
+                            matched_kw_list.append(kw)
+                    
+                    if matched_kw_list:
+                        matched_kw = ', '.join(matched_kw_list)
+                        context_parts.append(f"위험 키워드: {matched_kw}")
+                except Exception:
+                    pass
         
-        context_parts.append(f"\n위반 조항: {law_structure_info['full_path']}")
-        context_parts.append(f"조항 내용: {law_structure_info.get('ho_content', 'N/A')[:150]}")
-        context_parts.append(f"\n유사 사례:\n{best_match['document'].page_content[:300]}")
+        context_parts.append(f"\n위반 조항: {law_structure_info.get('full_path', 'Unknown')}")
+        
+        # ho_content 안전하게 처리
+        ho_content = law_structure_info.get('ho_content', 'N/A')
+        if ho_content and isinstance(ho_content, str) and ho_content != 'N/A':
+            context_parts.append(f"조항 내용: {ho_content[:150]}")
+        
+        # best_match 안전하게 처리
+        try:
+            if best_match and isinstance(best_match, dict) and 'document' in best_match:
+                doc_content = best_match['document'].page_content[:300] if hasattr(best_match['document'], 'page_content') else str(best_match.get('document', ''))[:300]
+                context_parts.append(f"\n유사 사례:\n{doc_content}")
+        except Exception:
+            context_parts.append("\n유사 사례: 정보 없음")
         
         context = '\n'.join(context_parts)
         
@@ -1083,7 +1151,7 @@ class GraphRAGJudge:
 다음 형식으로 설명:
 1. **위반 여부**: {confidence_expression}
 2. **문제점**: 위험 키워드 언급
-3. **법적 근거**: {law_structure_info['full_path']}
+3. **법적 근거**: {law_structure_info.get('full_path', 'Unknown')}
 4. **유사 사례**: 공통점
 
 각 2-3문장으로."""
@@ -1092,7 +1160,8 @@ class GraphRAGJudge:
             response = self.rag.llm.invoke(prompt)
             return response.content
         except Exception as e:
-            return f"{confidence_expression}. 패턴 분석: {len(pattern_analysis['matched_keywords'])}개 위험 키워드"
+            matched_count = len(pattern_analysis.get('matched_keywords', [])) if isinstance(pattern_analysis, dict) else 0
+            return f"{confidence_expression}. 패턴 분석: {matched_count}개 위험 키워드"
     
     def _generate_suggestion(
         self,
@@ -1100,11 +1169,22 @@ class GraphRAGJudge:
         law_structure_info: Dict
     ) -> str:
         """수정 제안 (수정된 시그니처)"""
-        risk_keywords = [kw['keyword'] for kw in pattern_analysis['matched_keywords'][:3]]
+        # pattern_analysis 안전하게 처리
+        risk_keywords = []
+        if pattern_analysis and isinstance(pattern_analysis, dict):
+            matched_keywords = pattern_analysis.get('matched_keywords', [])
+            if matched_keywords and isinstance(matched_keywords, list):
+                for kw in matched_keywords[:3]:
+                    if isinstance(kw, dict):
+                        keyword = kw.get('keyword', '')
+                        if keyword:
+                            risk_keywords.append(keyword)
+                    elif isinstance(kw, str):
+                        risk_keywords.append(kw)
         
         prompt = f"""약관 수정 제안:
 
-위반 조항: {law_structure_info['full_path']}
+위반 조항: {law_structure_info.get('full_path', 'Unknown')}
 위험 키워드: {', '.join(risk_keywords) if risk_keywords else '없음'}
 
 3-4문장으로 수정 방향 제시."""

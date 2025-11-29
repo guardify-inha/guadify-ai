@@ -33,6 +33,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# 사이드바 기본 width를 600px로 설정
+st.markdown("""
+<style>
+    /* 사이드바 기본 width 600px 설정 */
+    [data-testid="stSidebar"] {
+        width: 600px !important;
+        min-width: 600px !important;
+        max-width: 600px !important;
+    }
+    
+    /* 사용자 제공 선택자에 대한 width 설정 */
+    #root > div:nth-child(1) > div.withScreencast > div > div > section > div.st-emotion-cache-1csi29a.e6f82ta2 {
+        width: 600px !important;
+        min-width: 600px !important;
+        max-width: 600px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # 전역 초기화 (캐싱)
 @st.cache_resource
 def get_judge():

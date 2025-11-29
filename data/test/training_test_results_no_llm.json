@@ -1,0 +1,833 @@
+{
+  "metadata": {
+    "test_date": "2025-11-23T15:02:39.619111",
+    "source": "보도자료_데이터_전처리_최종.csv",
+    "sample_size": 50,
+    "total_tests": 100,
+    "method": "GraphRAGJudge (No LLM)",
+    "threshold": 0.55,
+    "llm_excluded": [
+      "Phase 6 (의미 반전)",
+      "Phase 8 (설명)",
+      "수정 제안"
+    ]
+  },
+  "confusion_matrix": {
+    "TP": 0,
+    "FN": 50,
+    "FP": 0,
+    "TN": 50
+  },
+  "metrics": {
+    "accuracy": 0.5,
+    "precision": 0,
+    "recall": 0.0,
+    "f1_score": 0
+  },
+  "results": {
+    "unfair": [
+      {
+        "text": "금융회사는 채무자의 신용상태 변동시 통지에 의하여 여신한도, 여신만기, 금리 등 여신거래조건을 변경할 수 있습니다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "저당물건의 처분은 법정절차에 의함을 원칙으로 하되 소유자가 동의를 한 때에는 회사는 적당하다고 인정되는 방법 시기 가격 등에 의하여 처분하고 그 취득금에서 근저당권 실행에 관련된 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.868,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "전항에 의한 저당물건의 처분방법, 시기, 가격, 처분대금의 채무변제충당순위 및 방법 등은 일체 회사에게 일임하고 회사가 경매에 의하지 않고 저당물건을 임의 처분하는 경우에 소유자는",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.886,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "채무자가 채무를 이행치 않는 경우에 회사는 저당물건의 소유자를 대위하여 이를 관리하고 그 처분의 대가 또는 임대 수익으로서 채무의 변제에 충당할 수 있으며 이 경우 전항의 약정을 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8950000000000001,
+        "expected_article": "약관법 제11조 제1호\n약관법 제10조 제1호",
+        "detected_article": "제11조",
+        "correct": true
+      },
+      {
+        "text": "채무자가 기일이 도래하거나 기한의 이익을 상실한 채무를 변제하지 아니하는 경우 채권자는 법정절차에 의하여 근저당권을 실행하거나 또는 일반적으로 적당하다고 인정되는 방법, 시기, 가",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "본 저당물건의 멸실, 훼손, 공용징수, 기타의 원인으로 인하여 그 저당물건의 담보가액이 부족하다고 회사가 인정할 때에는 그 손실은 소유자의 부담으로 하고 회사의 요구에 의하여 채무",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제11조 제2호\n약관법 제10조 제1호",
+        "detected_article": "제11조",
+        "correct": true
+      },
+      {
+        "text": "채무자는 할부금융 대출일로부터 금융회사가 정하는 기준에 따라 대출기일 이내에 도래하는 상환일을 초회납입일로 하며, 초회차 상환금액은 매월 납부해야 할 할부원금에 당해 대출일로부터 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "채무자는 제2조에서 정한 율에 의한 이자ㆍ분할상환금ㆍ분할상환원리금을 지급하기로 합니다. 다만, 첫 회 납입일은 금융회사가 정하는 기준에 따라 대출기일 이내에 도래하는 상환일로 하며",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "채무자 및 보증인은 거래에 필요한 각각의 명칭ㆍ상호ㆍ대표자ㆍ주소 등과 인감ㆍ서명을 금융회사가 정한 서면에 의하여, 미리 신고하기로 합니다. 또한 대리인에 의하여 거래하고자 할 경우",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제12조 제2호",
+        "detected_article": "제12조",
+        "correct": true
+      },
+      {
+        "text": "제1항에 의한 신고사항에 변경이 있는 경우, 채무자 및 보증인은 각각의 정보를 곧 서면으로 신고하기로 하며, 서면신고 하지 않음으로 발생한 손해에 대하여는 변경사항에 대한 신고를 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제12조 제2호\n약관법 제7조 제2호",
+        "detected_article": "제12조",
+        "correct": true
+      },
+      {
+        "text": "통지를 하거나 게시한 후 1개월 이내에 채무자의 서면에 의한 이의가 금융회사에 도달하지 않은 때에는, 약관의 변경을 승인한 것으로 봅니다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제12조",
+        "detected_article": "Unknown",
+        "correct": true
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 고객에게 3일의 기간을 부여하여 시정조치를 요구하고 고객이 적절한 조치를 취하지 아니 할 때에는 서비스 제공을 중지 할 수 있으며, 이 경우 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제9조 제3호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 ... 서비스 제공을 중지 할 수 있으며... 2. 고객이 약관 또는 관련 법규를 위반 하였을 때",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 ... 서비스 제공을 중지 할 수 있으며... 1. 고객이 고객번호, 비밀번호 등의 기밀사항을 타인에게 누설한 경우 3. 해킹 등 고의로 통신",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제9조 제3호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "회사는 법령에 의한 최고율 범위내에서 이자율, 연체이자율, 기타 수수료율을 변경할 수 있다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "회사가 제 1항에 의한 이자율, 연체이율, 기타 수수료율을 변경할 경우에는 제 16조의 방법에 따라 고지하여야 한다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "보험계약이 무효·취소되는 경우 이미 지급한 수당을 무조건 환수함. 계약체결 후 해지, 취소, 무효된 계약에대하여는 수수료를 지급하지 않으며, 그 계약으로 인하여 기 지급된 제 수수",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.886,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "고객 또는 은행이 중대한 과실 또는 부주의, 법규의 위반 또는 이 약관의 중대한 위반으로 인하여 발생한 손해 또는 손실을 ... 상대방에게 배상하기로 합니다. 1. 은행은 고객이 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8724999999999999,
+        "expected_article": "약관법 제7조 제2호\n",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "고객 또는 은행이 중대한 과실 또는 부주의, 법규의 위반 또는 이 약관의 중대한 위반으로 인하여 발생한 손해 또는 손실을 ... 상대방에게 배상하기로 합니다. 2. 고객은 제13조",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8724999999999999,
+        "expected_article": "약관법 제7조 제2호\n",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "은행은 필요한 경우 서비스의 종류와 내용을 추가, 변경, 제한할 수 있습 니다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제10조 제1호",
+        "detected_article": "제10조",
+        "correct": true
+      },
+      {
+        "text": "담보와 보증 거래처는 외환거래의 채무와 관련하여 은행의 요구가 있을 때에는 은행이 만족할만한 담보를 제공하며, 환율·금리 등의 변동으로 담보가치가 부족한 경우에는 추가담보를 제공하",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "다음 각호의 어느 하나에 해당하는 경우에는 상호저축은행은 고객 본인의 의사를 확인하지 않고 서비스를 해지할 수 있다. 1. 대리인이 출금계좌의 통장․인감을 제시하고 출금계좌의 해지",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "다음 각호의 어느 하나에 해당하는 경우에는 상호저축은행은 고객 본인의 의사를 확인하지 않고 서비스를 해지할 수 있다. 2. 기타 관계법령 또는 약관을 위반한 때",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "외국환거래약정의 취소 등 본인에게 은행의 여신거래기본약관 제7조의 기한전채무변제의무의 발생사유가있는 경우 은행은 이 약정서상 약정의 일부 또는 전부를 취소하거나 제2조에의한여신금액",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "본 약정의 약정기간은 __부터 __까지 1년으로 하며 이후에는 일방 당사자가본 약정을 개정 또는 해지하겠다는 서면 통지를 약정 만기일로부터 최소 30일전에 상대방 당사자에게 보내지",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.865,
+        "expected_article": "약관법 제12조 제1호",
+        "detected_article": "제12조",
+        "correct": true
+      },
+      {
+        "text": "은행은 이용기관이 전송한 거래지시 또는 자료 등이 착오, 오용, 유용, 위조, 변조 및 기타의 사고에 의한 것이라도 은행은 그 처리 결과에 책임을 지지 아니한다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제7조 제1호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "담보와 보증 거래처는 외환거래의 채무와 관련하여 은행의 요구가 있을 때에는 은행이만족할만한 담보를 제공하며, 환율·금리 등의 변동으로 담보가치가 부족한 경우에는추가담보를 제공하거나",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "은행은 이용회원에게 통지를 하는 경우, 이용회원이 은행에 제출한 전자우편 주소, (휴대)전화번호 또는 은행이 정한 통신 수단 중 은행이 적당하다고 판단 되는 통신수단을 이용합니다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "연대보증인, 연대채무자 등 이해관계인은 변제 등에 따른 대위에 의하여 은행으로부터취득한 권리를 은행과 본인간의 거래가 계속되고 있는 동안에는 은행의 동의없이행사하지 아니하기로 하고",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제6조 제2항 제1호\n약관법 제11조 제1호\n",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "제1항에 의한 담보목적물에 대한 담보권실행방법으로는 민사집행법에 의한환가방법 이외에도 은행이 적당하다고 인정하는 방법, 시기, 가격 등에 의하여담보목적물을 제3자에게 양도하거나 매",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "\n약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "은행이 이 약관을 변경하고자 할 경우에는 전 영업점 또는 은행 홈페이지에 1개월간 게시하기로 한다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "게시일로부터 1개월 이내에 서면에 의한 이의제기가 없는 경우 약관변경을 승인한 것으로 간주한다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.868,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "“갑”은 청렴계약조항 이행과 관련된 불이익 처분에 대하여 민형사상 일체의이의를 제기할 수 없다",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.9174999999999999,
+        "expected_article": "약관법 제11조 제1호",
+        "detected_article": "제11조",
+        "correct": true
+      },
+      {
+        "text": "계약중도해지 예금주가 만기일전에 분할중도 인출 가능한 횟수인 5회(가입 후 6개월이 경과하지 않은 경우는 3회)를 초과하거나 또는 1회에 3회차 납입금을 초과하여 지급 요청하는 경",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제12조 제1호",
+        "detected_article": "제12조",
+        "correct": true
+      },
+      {
+        "text": "이 계약에 관한 소송은 은행의 본점소재지를 관할하는 법원으로 합니다. 다만, 은행과 계약자가 합의하여 관할법원을 달리 정할 수 있습니다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제14조 제1호",
+        "detected_article": "제14조",
+        "correct": true
+      },
+      {
+        "text": "채무자 또는 보증인의 신용악화․담보가치의 감소 등의 사유로 채권보전상 필요하다고 인정된 때에는 채무자는 저축은행의 청구에 의하여 곧 저축은행이 인정하는 담보를 제공하거나 보증인을 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "다음 각호의 어느 하나에 해당하는 경우에는 상호저축은행은 고객 본인의 의사를 확인하지 않고 서비스를 해지할 수 있다. 1. 대리인이 출금계좌의 통장․인감을 제시하고 출금계좌의 해지",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "다음 각호의 어느 하나에 해당하는 경우에는 상호저축은행은 고객 본인의 의사를 확인하지 않고 서비스를 해지할 수 있다. 2. 기타 관계법령 또는 약관을 위반한 때",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제9조 제2호",
+        "detected_article": "제9조",
+        "correct": true
+      },
+      {
+        "text": "약정기한 만료후 상당기간이 경과할 때까지 계약을 갱신하지 않거나 대여금고를 명도하지 않는 경우에는 저희 상호저축은행은 입고품을 임의반출하여 따로 보관할 수 있으며, 상호저축은행 형",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "계약기간 만료후 예수품의 반환 또는 갱신의 청구가 없는 때에는 저희 상호저축 은행은 임차인에게 등기우편 또는 배달증명우편으로서 처분에 관한 통지 절차를 거쳐 처분하기로 하며, 예수",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 1호: 제1항의 규정에도 불구하고 상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다.",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 2호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 2. 이용자가 접근매",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 3호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 3. 제3자가 권한 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8499999999999999,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 4호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 4. 법인(중소기업기",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제7조 제2호",
+        "detected_article": "제7조",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제29조 ③항: 상호저축은행은 제1항의 게시 또는 제2항의 통지를 할 경우 “이용자가 변경에 동의하지 아니한 경우 제1항의 게시 또는 제2항의 통지를 받은 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.886,
+        "expected_article": "약관법 제12조 제1호\n약관법 제6조 제2항 제1호",
+        "detected_article": "Unknown",
+        "correct": true
+      },
+      {
+        "text": "[전자금융거래기본약관] 제29조 ④항: 제1항의 게시 또는 제2항의 통지(제3항의 게시·통지내용 포함)를 받은 날로부터 1개월 이내에 이용자의 서면에 의한 이의 또는 계약해지의 의",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8860000000000001,
+        "expected_article": "약관법 제12조 제1호\n약관법 제6조 제2항 제1호",
+        "detected_article": "Unknown",
+        "correct": true
+      },
+      {
+        "text": "보증인이 보증하는 채무의 범위 <특정채무보증> 마. 지연배상금: 상환기일에 지급하지 아니한 때 또는 기한의 이익(미리 정한기간동안 당사자가 누리는 이익)을 상실한 때에는 지급하여야",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 그 납입기일을 일방적으로정하는 조항 융자를 함에 있어 융자거래자는 담보로 납부한 대용증권의 시세변동으로 담보가액의 총액이 <별첨>에서 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.85,
+        "expected_article": "약관법 제6조 제2항 제1호",
+        "detected_article": "제6조",
+        "correct": true
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 그 납입 기간의 기산점을‘추가담보 제공 요구일’이 아닌 ‘담보 부족 발생일’ 로 정한 조항일반담보대출 및 수시입출금대출을 함에 있어, ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "expected_article": "약관법 제11조 제2호",
+        "detected_article": "제11조",
+        "correct": true
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 납부 기한을 담보 부족비율의정도를 고려하지 않고 일률적으로 ‘담보 추가 납부 요구일 당일’ 로 정한조항 고객은 대출금에 대한 담보가액 ",
+        "expected": true,
+        "predicted": true,
+        "confidence": 0.8724999999999999,
+        "expected_article": "약관법 제11조 제2호",
+        "detected_article": "제11조",
+        "correct": true
+      }
+    ],
+    "fair": [
+      {
+        "text": "금융회사는 다음 각 호에서 정한 사유가 발생하여 채무자의 신용상태가 계약 체결 당시에 비해 현저히 악화되었다고 객관적으로 판단되는 경우에 한하여, 서면 통지를 통해 여신한도, 여신",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7179764385456824,
+        "correct": false
+      },
+      {
+        "text": "저당물건의 처분은 법정절차에 따르는 것을 원칙으로 합니다. 다만, 채무자의 이익을 보호할 필요가 있고 회사가 처분의 방법, 시기, 예상 가격에 대하여 채무자 및 소유자와 사전에 충",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7143327281366789,
+        "correct": false
+      },
+      {
+        "text": "전항에 따라 저당물건을 임의 처분하는 경우, 회사는 처분 방법, 시기, 가격 등에 대하여 채무자 및 소유자와 사전에 서면으로 합의해야 합니다. 처분대금의 변제 충당 순서 및 방법은",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7415056105179193,
+        "correct": false
+      },
+      {
+        "text": "채무자가 채무를 이행하지 않는 경우, 회사는 저당물건의 처분을 위해 필요한 범위 내에서 이를 보존 및 관리할 수 있으며, 법정절차 또는 당사자 간 사전에 합의된 방법에 따라 처분하",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7416355758227651,
+        "correct": false
+      },
+      {
+        "text": "채무자가 기일이 도래하거나 기한의 이익을 상실한 채무를 변제하지 아니하는 경우 채권자는 법정절차에 의하여 근저당권을 실행하거나 또는 일반적으로 적당하다고 인정되는 방법, 시기, 가",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "correct": false
+      },
+      {
+        "text": "본 저당물건의 멸실, 훼손, 공용징수, 기타의 원인으로 인하여 그 저당물건의 담보가액이 부족하다고 회사가 인정할 때에는 그 손실은 소유자의 부담으로 하고 회사의 요구에 의하여 채무",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7853282545112803,
+        "correct": false
+      },
+      {
+        "text": "채무자는 할부금융 대출일로부터 금융회사가 정하는 기준에 따라 대출기일 이내에 도래하는 상환일을 초회납입일로 하며, 초회차 상환금액은 매월 납부해야 할 할부원금에 당해 대출일로부터 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7722240366231639,
+        "correct": false
+      },
+      {
+        "text": "채무자는 제2조에서 정한 율에 의한 이자ㆍ분할상환금ㆍ분할상환원리금을 지급하기로 합니다. 다만, 첫 회 납입일은 금융회사가 정하는 기준에 따라 대출기일 이내에 도래하는 상환일로 하며",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7577221118753077,
+        "correct": false
+      },
+      {
+        "text": "채무자 및 보증인은 거래에 필요한 각각의 명칭ㆍ상호ㆍ대표자ㆍ주소 등과 인감ㆍ서명을 금융회사가 정한 서면, 전자우편, 문자메시지 또는 전자적 방법으로, 미리 신고하기로 합니다. 또한",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8147532461808057,
+        "correct": false
+      },
+      {
+        "text": "제1항에 의한 신고사항에 변경이 있는 경우, 채무자 및 보증인은 각각의 정보를 곧 서면으로 신고하기로 하며, 서면신고 하지 않음으로 발생한 손해에 대하여는 변경사항에 대한 신고를 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.85,
+        "correct": false
+      },
+      {
+        "text": "통지를 하거나 게시한 후 1개월 이내에 채무자의 서면에 의한 이의가 금융회사에 도달하지 않은 때에는, 약관의 변경을 승인한 것으로 봅니다. 본 조항은 관련 법령에서 정한 고객의 권",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7526412204940733,
+        "correct": false
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 고객에게 3일의 기간을 부여하여 시정조치를 요구하고 고객이 적절한 조치를 취하지 아니 할 때에는 서비스 제공을 중지 할 수 있으며, 이 경우 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7971325097153902,
+        "correct": false
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 ... 서비스 제공을 중지 할 수 있으며... 2. 고객이 약관 또는 관련 법규를 위반 하였을 때 본 조항은 관련 법령에서 정한 고객의 권리를",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7484492230437241,
+        "correct": false
+      },
+      {
+        "text": "다음 각 호의 하나에 해당 할 때에는 ... 서비스 제공을 중지 할 수 있으며... 1. 고객이 고객번호, 비밀번호 등의 기밀사항을 타인에게 누설한 경우 3. 해킹 등 고의로 통신",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7585430406692742,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유로 수수료(요금) 변경이 필요한 경우, 변경 내용과 사유를 서면, 전자우편 또는 문자메시지로 변경 시행일 60일 전까지 고객에게 통지합니다.\n1. 관련 법",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.669786863884593,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유로 수수료(요금) 변경이 필요한 경우, 변경 내용과 사유를 서면, 전자우편 또는 문자메시지로 변경 시행일 60일 전까지 고객에게 통지합니다.\n1. 관련 법",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.669786863884593,
+        "correct": false
+      },
+      {
+        "text": "보험설계사의 귀책사유가 없는 경우에 환수하지 않거나, 회사의 귀책사유로 인한 경우에 환수하지 않는 등의 예외 조항을둠\n <1안> (본문생략) 단, 보험설계사의 귀책사유가 없는 경우",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.6236941533696576,
+        "correct": false
+      },
+      {
+        "text": "고객 또는 은행이 중대한 과실 또는 부주의, 법규의 위반 또는 이 약관의 중대한 위반으로 인하여 발생한 손해 또는 손실을 ... 상대방에게 배상하기로 합니다. 1. 은행은 고객이 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8501731330924444,
+        "correct": false
+      },
+      {
+        "text": "고객 또는 은행이 중대한 과실 또는 부주의, 법규의 위반 또는 이 약관의 중대한 위반으로 인하여 발생한 손해 또는 손실을 ... 상대방에게 배상하기로 합니다. 2. 고객은 제13조",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8370474993536707,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유가 발생한 경우, 변경 내용과 변경 사유를 서비스 화면 또는 서면으로 변경일 30일 전까지 고객에게 통지한 후 서비스 내용을 변경할 수 있습니다.\n1. 관",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.6815377165559124,
+        "correct": false
+      },
+      {
+        "text": "담보와 보증 거래처는 외환거래의 채무와 관련하여 은행의 요구가 있을 때에는 은행이 만족할만한 담보를 제공하며, 환율·금리 등의 변동으로 담보가치가 부족한 경우에는 추가담보를 제공하",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8377716917809396,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유가 발생하고, 회사가 상당한 기간을 정하여 시정을 최고하였으나 고객이 이를 시정하지 않은 경우에 한하여 서면으로 통지한 후 계약을 해지할 수 있습니다.\n1",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7256454146216604,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유가 발생하고, 회사가 상당한 기간을 정하여 시정을 최고하였으나 고객이 이를 시정하지 않은 경우에 한하여 서면으로 통지한 후 계약을 해지할 수 있습니다.\n1",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7256454146216604,
+        "correct": false
+      },
+      {
+        "text": "외국환거래약정의 취소 등 본인에게 은행의 여신거래기본약관 제7조의 기한전채무변제의무의 발생사유가있는 경우 은행은 이 약정서상 약정의 일부 또는 전부를 취소하거나 제2조에의한여신금액",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7430701998430038,
+        "correct": false
+      },
+      {
+        "text": "본 약정의 약정기간은 __부터 __까지 1년으로 하며 이후에는 일방 당사자가본 약정을 개정 또는 해지하겠다는 서면 통지를 약정 만기일로부터 최소 30일전에 상대방 당사자에게 보내지",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.800773649138446,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유로 발생한 손해에 대하여 책임을 부담합니다.\n1. 회사의 고의 또는 중대한 과실로 인한 손해: 전액 배상\n2. 회사의 경과실로 인한 손해: 통상손해의 범위",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7025671970528339,
+        "correct": false
+      },
+      {
+        "text": "담보와 보증 거래처는 외환거래의 채무와 관련하여 은행의 요구가 있을 때에는 은행이만족할만한 담보를 제공하며, 환율·금리 등의 변동으로 담보가치가 부족한 경우에는추가담보를 제공하거나",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8341166276608097,
+        "correct": false
+      },
+      {
+        "text": "은행은 이용회원에게 통지를 하는 경우, 이용회원이 은행에 제출한 전자우편 주소, (휴대)전화번호 또는 은행이 정한 통신 수단 중 은행이 적당하다고 판단 되는 통신수단을 이용합니다.",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7346690042731923,
+        "correct": false
+      },
+      {
+        "text": "연대보증인, 연대채무자 등 이해관계인은 변제 등에 따른 대위에 의하여 은행으로부터취득한 권리를 은행과 본인간의 거래가 계속되고 있는 동안에는 은행의 동의없이행사하지 아니하기로 하고",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8286723504207429,
+        "correct": false
+      },
+      {
+        "text": "제1항에 의한 담보목적물에 대한 담보권실행방법으로는 민사집행법에 의한환가방법 이외에도 은행이 적당하다고 인정하는 방법, 시기, 가격 등에 의하여담보목적물을 제3자에게 양도하거나 매",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.748951212414724,
+        "correct": false
+      },
+      {
+        "text": "은행이 이 약관을 변경하고자 할 경우에는 전 영업점 또는 은행 홈페이지에 1개월간 게시하기로 한다. 본 조항은 신의성실의 원칙에 따라 고객과 회사 간의 이익을 공정하게 조정하는 범",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7417732404672491,
+        "correct": false
+      },
+      {
+        "text": "게시일로부터 1개월 이내에 서면에 의한 이의제기가 없는 경우 약관변경을 승인한 것으로 간주한다. 본 조항은 신의성실의 원칙에 따라 고객과 회사 간의 이익을 공정하게 조정하는 범위 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7028777992955664,
+        "correct": false
+      },
+      {
+        "text": "“갑”은 청렴계약조항 이행과 관련된 불이익 처분에 대하여 민형사상 일체의이의를 제기할 수 없다 다만, 고객은 법률에서 정한 항변권, 상계권 등의 권리를 행사할 수 있습니다.",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8139847659605395,
+        "correct": false
+      },
+      {
+        "text": "계약중도해지 예금주가 만기일전에 분할중도 인출 가능한 횟수인 5회(가입 후 6개월이 경과하지 않은 경우는 3회)를 초과하거나 또는 1회에 3회차 납입금을 초과하여 지급 요청하는 경",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7742916869935125,
+        "correct": false
+      },
+      {
+        "text": "본 계약과 관련된 분쟁은 민사소송법에서 정한 관할 법원 또는 당사자 간 합의로 정한 법원에 제기할 수 있습니다. 회사와 고객은 상호 편의를 고려하여 관할 법원을 정할 수 있으며, ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.670996304633221,
+        "correct": false
+      },
+      {
+        "text": "채무자 또는 보증인의 신용악화․담보가치의 감소 등의 사유로 채권보전상 필요하다고 인정된 때에는 채무자는 저축은행의 청구에 의하여 곧 저축은행이 인정하는 담보를 제공하거나 보증인을 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7982982702441167,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유가 발생하고, 회사가 상당한 기간을 정하여 시정을 최고하였으나 고객이 이를 시정하지 않은 경우에 한하여 서면으로 통지한 후 계약을 해지할 수 있습니다.\n1",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7256454146216604,
+        "correct": false
+      },
+      {
+        "text": "회사는 다음 각 호의 사유가 발생하고, 회사가 상당한 기간을 정하여 시정을 최고하였으나 고객이 이를 시정하지 않은 경우에 한하여 서면으로 통지한 후 계약을 해지할 수 있습니다.\n1",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7256454146216604,
+        "correct": false
+      },
+      {
+        "text": "약정기한 만료후 상당기간이 경과할 때까지 계약을 갱신하지 않거나 대여금고를 명도하지 않는 경우에는 저희 상호저축은행은 입고품을 임의반출하여 따로 보관할 수 있으며, 상호저축은행 형",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8085893351806774,
+        "correct": false
+      },
+      {
+        "text": "계약기간 만료후 예수품의 반환 또는 갱신의 청구가 없는 때에는 저희 상호저축 은행은 임차인에게 등기우편 또는 배달증명우편으로서 처분에 관한 통지 절차를 거쳐 처분하기로 하며, 예수",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7983890719865125,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 1호: 제1항의 규정에도 불구하고 상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다.",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8082385736550576,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 2호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 2. 이용자가 접근매",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8371347089554534,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 3호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 3. 제3자가 권한 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8286406053000648,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제20조 ②항 4호: ...상호저축은행은 다음 각호의 어느 하나에 해당하는 경우에는 이용자에게 손해가 생기더라도 책임을 지지 아니한다. 4. 법인(중소기업기",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8851266369986867,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제29조 ③항: 상호저축은행은 제1항의 게시 또는 제2항의 통지를 할 경우 “이용자가 변경에 동의하지 아니한 경우 제1항의 게시 또는 제2항의 통지를 받은 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8400880161273401,
+        "correct": false
+      },
+      {
+        "text": "[전자금융거래기본약관] 제29조 ④항: 제1항의 게시 또는 제2항의 통지(제3항의 게시·통지내용 포함)를 받은 날로부터 1개월 이내에 이용자의 서면에 의한 이의 또는 계약해지의 의",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7979023777802512,
+        "correct": false
+      },
+      {
+        "text": "보증인이 보증하는 채무의 범위 <특정채무보증> 마. 지연배상금: 상환기일에 지급하지 아니한 때 또는 기한의 이익(미리 정한기간동안 당사자가 누리는 이익)을 상실한 때에는 지급하여야",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.7594641470960137,
+        "correct": false
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 그 납입기일을 일방적으로정하는 조항 융자를 함에 있어 융자거래자는 담보로 납부한 대용증권의 시세변동으로 담보가액의 총액이 <별첨>에서 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8300836460751865,
+        "correct": false
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 그 납입 기간의 기산점을‘추가담보 제공 요구일’이 아닌 ‘담보 부족 발생일’ 로 정한 조항일반담보대출 및 수시입출금대출을 함에 있어, ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8500000000000001,
+        "correct": false
+      },
+      {
+        "text": "회사가 고객에게 추가 담보 납부를 요구하면서 납부 기한을 담보 부족비율의정도를 고려하지 않고 일률적으로 ‘담보 추가 납부 요구일 당일’ 로 정한조항 고객은 대출금에 대한 담보가액 ",
+        "expected": false,
+        "predicted": true,
+        "confidence": 0.8724999999999999,
+        "correct": false
+      }
+    ]
+  }
+}

@@ -45,4 +45,5 @@ temp_archive/
 .env
 IMPROVEMENT_STRATEGY.md
 
-data/test/*
+data/test/*1
+scripts/edit_app.py
