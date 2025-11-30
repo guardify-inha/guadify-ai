@@ -12,6 +12,7 @@ GraphRAG 기반 불공정 약관 판단 시스템 - v8.1 (Fixed)
 from typing import Dict, List, Tuple
 from rag.hybrid_graphrag import HybridGraphRAG
 from database.neo4j_connector import Neo4jConnector
+from config.settings import settings
 import numpy as np
 import json
 from pathlib import Path
@@ -26,11 +27,7 @@ class GraphRAGJudge:
         self.conn = conn
         
         # 임계값 설정
-        self.THRESHOLDS = {
-            'high_risk': 0.85,
-            'medium_risk': 0.75,
-            'low_risk': 0.65,
-        }
+        self.THRESHOLDS = settings.THRESHOLDS
         
         # Prototypical Networks 파라미터
         self.TEMPERATURE = 0.5  # 0.4 → 0.5 (더 부드러운 확률 분포)
@@ -263,6 +260,7 @@ class GraphRAGJudge:
         explanation = self._generate_explanation(
             user_text=user_text,
             best_match=best_match,
+            similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
             final_score=final_score,
             pattern_analysis=pattern_analysis,
             law_structure_info=law_structure_info,
@@ -326,6 +324,8 @@ class GraphRAGJudge:
             
             # 수정 제안 (수정됨)
             'suggestion': self._generate_suggestion(
+                user_text=user_text,  # 추가
+                similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
                 pattern_analysis=pattern_analysis,
                 law_structure_info=law_structure_info
             ),
@@ -364,17 +364,18 @@ class GraphRAGJudge:
         """
 
         print("✅ 유사 사례 없음 - 전체 데이터베이스 prototype 사용\n")
+        print("🔍 Finetuned 모델 사용: Prototypical Networks (DB)")
 
-        # 1. 데이터베이스에서 랜덤 샘플링으로 prototypes 생성
+        # 1. 데이터베이스에서 랜덤 샘플링으로 prototypes 생성 (Finetuned 필드 사용)
         query = """
         MATCH (v:ViolationCase)
-        WHERE v.embedding_violation IS NOT NULL
-          AND v.embedding_corrected IS NOT NULL
+        WHERE v.embedding_violation_finetuned IS NOT NULL
+          AND v.embedding_corrected_finetuned IS NOT NULL
         WITH v
         ORDER BY rand()
         LIMIT 50
-        RETURN v.embedding_violation as unfair_emb,
-               v.embedding_corrected as fair_emb
+        RETURN v.embedding_violation_finetuned as unfair_emb,
+               v.embedding_corrected_finetuned as fair_emb
         """
 
         results = self.conn.execute_query(query)
@@ -391,8 +392,8 @@ class GraphRAGJudge:
                 'interpretation': 'DB 프로토타입 없음 - 패턴만 사용'
             }
 
-        # 2. 사용자 텍스트 임베딩
-        user_embedding = np.array(self.rag.local_embeddings.embed_query(user_text))
+        # 2. 사용자 텍스트 임베딩 (Finetuned 모델 사용)
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
 
         # 3. Unfair prototype: embedding_violation들의 평균
         unfair_embeddings = [np.array(r['unfair_emb']) for r in results if r.get('unfair_emb')]
@@ -452,7 +453,10 @@ class GraphRAGJudge:
         1. 여러 unfair 사례의 평균으로 prototype 생성
         2. 여러 fair 사례의 평균으로 prototype 생성
         3. Squared Euclidean distance 사용
+        4. Finetuned 모델 사용 (정확한 판단)
         """
+        
+        print("🔍 Finetuned 모델 사용: Prototypical Networks (Multi-prototype)")
         
         # best_match에서 unfair_similarity 가져오기
         best_match = next((case for case in similar_cases if case['metadata']['id'] == best_unfair_case_id), None)
@@ -499,15 +503,15 @@ class GraphRAGJudge:
                 'interpretation': '수정본 없음 - 단일 유사도 사용'
             }
         
-        # 4. 임베딩 생성
-        user_embedding = np.array(self.rag.local_embeddings.embed_query(user_text))
+        # 4. 임베딩 생성 (Finetuned 모델 사용)
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
         
-        # Unfair prototype: 여러 unfair 사례의 평균
-        unfair_embeddings = [np.array(self.rag.local_embeddings.embed_query(text)) for text in unfair_texts]
+        # Unfair prototype: 여러 unfair 사례의 평균 (Finetuned 모델 사용)
+        unfair_embeddings = [np.array(self.rag.finetuned_embeddings.embed_query(text)) for text in unfair_texts]
         unfair_prototype = np.mean(unfair_embeddings, axis=0) if unfair_embeddings else user_embedding
         
-        # Fair prototype: 여러 fair 사례의 평균
-        fair_embeddings = [np.array(self.rag.local_embeddings.embed_query(text)) for text in fair_texts]
+        # Fair prototype: 여러 fair 사례의 평균 (Finetuned 모델 사용)
+        fair_embeddings = [np.array(self.rag.finetuned_embeddings.embed_query(text)) for text in fair_texts]
         fair_prototype = np.mean(fair_embeddings, axis=0) if fair_embeddings else user_embedding
         
         # 5. Squared Euclidean distance 계산
@@ -555,18 +559,20 @@ class GraphRAGJudge:
         user_text: str,
         best_unfair_case_id: str
     ) -> Dict:
-        """Fallback: 단일 사례 기반 불공정도 계산"""
+        """Fallback: 단일 사례 기반 불공정도 계산 (Finetuned 모델 사용)"""
+        
+        print("🔍 Finetuned 모델 사용: Prototypical Networks (Single-case)")
         
         query = """
         MATCH (v:ViolationCase {id: $case_id})
-        RETURN v.corrected_text as corrected_text, v.text as unfair_text
+        RETURN v.corrected_text as corrected_text, v.original_text as unfair_text
         """
         
         result = self.conn.execute_query(query, {'case_id': best_unfair_case_id})
         
         if not result or not result[0].get('corrected_text'):
             # 수정본도 없으면 유사도만 사용
-            user_emb = self.rag.local_embeddings.encode([user_text])[0]
+            user_emb = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
             
             # 최소한의 거리 추정
             return {
@@ -581,10 +587,10 @@ class GraphRAGJudge:
         corrected_text = result[0]['corrected_text']
         unfair_text = result[0].get('unfair_text', '')
         
-        # 단일 prototype 사용
-        user_embedding = self.rag.local_embeddings.encode([user_text])[0]
-        unfair_prototype = self.rag.local_embeddings.encode([unfair_text])[0] if unfair_text else None
-        fair_prototype = self.rag.local_embeddings.encode([corrected_text])[0]
+        # 단일 prototype 사용 (Finetuned 모델 사용)
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
+        unfair_prototype = np.array(self.rag.finetuned_embeddings.embed_query(unfair_text)) if unfair_text else None
+        fair_prototype = np.array(self.rag.finetuned_embeddings.embed_query(corrected_text))
         
         if unfair_prototype is not None:
             dist_to_unfair = float(np.sum((user_embedding - unfair_prototype) ** 2))
@@ -1084,115 +1090,235 @@ class GraphRAGJudge:
     # 설명 및 제안 생성 (수정됨 - 시그니처 일치)
     # ======================================================================
     
+    # ----------------------------------------------------------------
+    # [추가] 프롬프트 헬퍼 메서드
+    # ----------------------------------------------------------------
+    def _format_similar_cases_for_explanation(self, similar_cases: List[Dict], max_cases: int = 3) -> str:
+        """설명 생성을 위한 유사 사례 포맷팅"""
+        if not similar_cases:
+            return "참고할 만한 유사 위반 사례가 없습니다."
+        
+        formatted_cases = []
+        for i, case in enumerate(similar_cases[:max_cases], 1):
+            # 현재 구조: {'document': doc, 'similarity_score': float, 'metadata': {...}}
+            # document는 page_content 속성을 가진 객체
+            try:
+                if 'document' in case and hasattr(case['document'], 'page_content'):
+                    content = case['document'].page_content.strip()
+                else:
+                    content = str(case.get('document', '')).strip()
+                
+                # 메타데이터 안전하게 가져오기
+                metadata = case.get('metadata', {})
+                reason = metadata.get('violation_reason', '정보 없음').strip()
+                corrected = metadata.get('corrected_text', '정보 없음').strip()
+                
+                # 원문이 200자 이상이면 잘라서 표시
+                content_display = content[:200] + "..." if len(content) > 200 else content
+                
+                case_str = (
+                    f"[유사 사례 {i}]\n"
+                    f"- 원문 조항: {content_display}\n"
+                    f"- 시정 요청 사유: {reason}\n"
+                    f"- 수정 후 조항: {corrected}"
+                )
+                formatted_cases.append(case_str)
+            except Exception as e:
+                # 개별 사례 처리 실패 시 스킵
+                continue
+        
+        if not formatted_cases:
+            return "참고할 만한 유사 위반 사례가 없습니다."
+        
+        return "\n\n".join(formatted_cases)
+    
+    def _format_corrected_clauses_for_suggestion(self, similar_cases: List[Dict], max_cases: int = 5) -> str:
+        """수정 제안 생성을 위한 수정 조항 추출 포맷팅"""
+        valid_corrections = []
+        seen_corrections = set()  # 중복 제거용
+        
+        for case in similar_cases:
+            try:
+                metadata = case.get('metadata', {})
+                corrected = metadata.get('corrected_text', '').strip()
+                
+                # 수정 조항이 있고, '정보 없음'이 아니며, 이전에 본 적 없는 조항일 때
+                if corrected and len(corrected) > 5 and corrected not in seen_corrections and corrected != '정보 없음':
+                    seen_corrections.add(corrected)
+                    valid_corrections.append(corrected)
+            except Exception:
+                # 개별 사례 처리 실패 시 스킵
+                continue
+        
+        if not valid_corrections:
+            return "참고할 만한 구체적인 수정 사례가 없습니다. 표준 약관이나 법령에 근거하여 작성해주세요."
+        
+        formatted_list = []
+        for i, text in enumerate(valid_corrections[:max_cases], 1):
+            formatted_list.append(f"{i}. {text}")
+        
+        return "\n\n".join(formatted_list)
+    
     def _generate_explanation(
         self,
         user_text: str,
         best_match: Dict,
+        similar_cases: List[Dict],  # 추가
         final_score: float,
         pattern_analysis: Dict,
         law_structure_info: Dict,
         confidence_expression: str
     ) -> str:
-        """LLM 설명 생성 (수정된 시그니처)"""
-        context_parts = []
+        """RAG 기반 상세 설명 생성 (유사 사례 활용 강화)"""
         
-        context_parts.append(f"판단: {confidence_expression}")
+        # 디버깅: 유사 사례 확인
+        print(f"  📊 유사 사례 수: {len(similar_cases) if similar_cases else 0}")
+        if similar_cases and len(similar_cases) > 0:
+            first_case = similar_cases[0]
+            metadata = first_case.get('metadata', {})
+            print(f"  📋 첫 번째 사례 메타데이터: violation_reason={bool(metadata.get('violation_reason'))}, corrected_text={bool(metadata.get('corrected_text'))}")
         
-        # pattern_analysis 안전하게 처리
+        # 유사 사례 포맷팅
+        similar_cases_text = self._format_similar_cases_for_explanation(similar_cases)
+        print(f"  📝 포맷팅된 유사 사례 텍스트 길이: {len(similar_cases_text)}자")
+        
+        # 키워드 정보 추출
+        risk_keywords = []
         if pattern_analysis and isinstance(pattern_analysis, dict):
             matched_keywords = pattern_analysis.get('matched_keywords', [])
             if matched_keywords and isinstance(matched_keywords, list):
                 try:
-                    matched_kw_list = []
                     for kw in matched_keywords[:5]:
                         if isinstance(kw, dict):
                             keyword = kw.get('keyword', '')
-                            risk_level = kw.get('risk_level', 'unknown')
-                            method = kw.get('method', 'unknown')
                             if keyword:
-                                matched_kw_list.append(f"{keyword}({risk_level},{method})")
+                                risk_keywords.append(keyword)
                         elif isinstance(kw, str):
-                            matched_kw_list.append(kw)
-                    
-                    if matched_kw_list:
-                        matched_kw = ', '.join(matched_kw_list)
-                        context_parts.append(f"위험 키워드: {matched_kw}")
+                            risk_keywords.append(kw)
                 except Exception:
                     pass
         
-        context_parts.append(f"\n위반 조항: {law_structure_info.get('full_path', 'Unknown')}")
-        
-        # ho_content 안전하게 처리
-        ho_content = law_structure_info.get('ho_content', 'N/A')
-        if ho_content and isinstance(ho_content, str) and ho_content != 'N/A':
-            context_parts.append(f"조항 내용: {ho_content[:150]}")
-        
-        # best_match 안전하게 처리
-        try:
-            if best_match and isinstance(best_match, dict) and 'document' in best_match:
-                doc_content = best_match['document'].page_content[:300] if hasattr(best_match['document'], 'page_content') else str(best_match.get('document', ''))[:300]
-                context_parts.append(f"\n유사 사례:\n{doc_content}")
-        except Exception:
-            context_parts.append("\n유사 사례: 정보 없음")
-        
-        context = '\n'.join(context_parts)
-        
-        prompt = f"""다음 약관을 분석했습니다:
+        prompt = f"""당신은 공정거래위원회의 불공정 약관 심사 전문가입니다.
+다음 약관 조항을 정밀 분석하여 법적 위험성을 설명해주세요.
 
-[검토 대상]
+[검토 대상 약관]
 {user_text}
 
-[분석 결과]
-{context}
+[관련 법령/가이드라인]
+{law_structure_info.get('full_path', '관련 법령 정보 없음')}
 
-[판단 점수]
-{final_score:.2f} / 1.00
+[유사 위반 사례 및 시정 내역]
+이 조항과 유사한 과거 위반 사례들입니다. 특히 '시정 요청 사유'를 주의 깊게 참고하세요.
 
-다음 형식으로 설명:
-1. **위반 여부**: {confidence_expression}
-2. **문제점**: 위험 키워드 언급
-3. **법적 근거**: {law_structure_info.get('full_path', 'Unknown')}
-4. **유사 사례**: 공통점
+---
+{similar_cases_text}
+---
 
-각 2-3문장으로."""
+위 정보를 종합하여 다음 항목에 맞춰 상세히 설명하세요:
+
+1. **위반 여부 판단**:
+   - {confidence_expression} (점수: {final_score:.2f})
+
+2. **법적 문제점 분석**:
+   - 발견된 위험 키워드: {', '.join(risk_keywords) if risk_keywords else '없음'}
+   - 유사 사례의 '시정 요청 사유'와 비교하여, 검토 대상 약관이 구체적으로 어떤 면에서 불공정한지 논리적으로 설명하세요.
+
+3. **심사 결론**:
+   - 해당 조항이 고객에게 부당하게 불리한지, 법률 규정을 위반하는지 명확히 서술하세요.
+
+결과는 전문적이고 객관적인 어조로 작성하며, 추측보다는 근거에 기반하여 작성하세요.
+"""
         
         try:
+            # LLM 초기화 확인
+            if not hasattr(self.rag, 'llm') or self.rag.llm is None:
+                raise ValueError("LLM이 초기화되지 않았습니다.")
+            
+            print(f"  🤖 LLM 호출 중... (프롬프트 길이: {len(prompt)}자)")
             response = self.rag.llm.invoke(prompt)
+            print(f"  ✅ LLM 응답 수신 완료")
             return response.content
         except Exception as e:
+            # 에러 로깅 추가
+            print(f"⚠️ LLM 설명 생성 실패: {e}")
+            print(f"   프롬프트 길이: {len(prompt)}자")
+            print(f"   유사 사례 수: {len(similar_cases) if similar_cases else 0}")
+            import traceback
+            traceback.print_exc()
             matched_count = len(pattern_analysis.get('matched_keywords', [])) if isinstance(pattern_analysis, dict) else 0
             return f"{confidence_expression}. 패턴 분석: {matched_count}개 위험 키워드"
     
     def _generate_suggestion(
         self,
+        user_text: str,  # 추가
+        similar_cases: List[Dict],  # 추가
         pattern_analysis: Dict,
         law_structure_info: Dict
     ) -> str:
-        """수정 제안 (수정된 시그니처)"""
-        # pattern_analysis 안전하게 처리
-        risk_keywords = []
-        if pattern_analysis and isinstance(pattern_analysis, dict):
-            matched_keywords = pattern_analysis.get('matched_keywords', [])
-            if matched_keywords and isinstance(matched_keywords, list):
-                for kw in matched_keywords[:3]:
-                    if isinstance(kw, dict):
-                        keyword = kw.get('keyword', '')
-                        if keyword:
-                            risk_keywords.append(keyword)
-                    elif isinstance(kw, str):
-                        risk_keywords.append(kw)
+        """약관 수정 제안 생성 (수정 사례 활용 강화)"""
         
-        prompt = f"""약관 수정 제안:
+        # 디버깅: 유사 사례 확인
+        print(f"  📊 유사 사례 수: {len(similar_cases) if similar_cases else 0}")
+        if similar_cases and len(similar_cases) > 0:
+            first_case = similar_cases[0]
+            metadata = first_case.get('metadata', {})
+            print(f"  📋 첫 번째 사례 메타데이터: violation_reason={bool(metadata.get('violation_reason'))}, corrected_text={bool(metadata.get('corrected_text'))}")
+        
+        corrected_examples = self._format_corrected_clauses_for_suggestion(similar_cases)
+        print(f"  📝 포맷팅된 수정 조항 텍스트 길이: {len(corrected_examples)}자")
+        
+        prompt = f"""[검토 대상 약관]
+{user_text}
 
-위반 조항: {law_structure_info.get('full_path', 'Unknown')}
-위험 키워드: {', '.join(risk_keywords) if risk_keywords else '없음'}
+[위반 혐의]
+{law_structure_info.get('full_path', 'Unknown')}
 
-3-4문장으로 수정 방향 제시."""
+[참고: 유사 조항의 실제 수정 사례]
+다음은 유사한 불공정 조항들이 실제로 시정된 후의 문구들입니다. 이를 패턴으로 참고하세요:
+
+---
+{corrected_examples}
+---
+
+위 참고 사례들을 바탕으로 검토 대상 약관을 공정하게 수정한 조항을 제시하세요.
+
+[작성 형식]
+**수정 전**: (검토 대상 약관 원문)
+**수정 후**: (법적 위험을 제거한 구체적인 수정 조항)
+**수정 이유**: (어떤 불공정 요소를 제거하기 위해 어떻게 문구를 변경했는지 1-2문장으로 설명)
+
+주의: 문맥상 어색하지 않고 즉시 사용할 수 있는 완성된 문장으로 작성하세요.
+"""
         
         try:
+            # LLM 초기화 확인
+            if not hasattr(self.rag, 'llm') or self.rag.llm is None:
+                raise ValueError("LLM이 초기화되지 않았습니다.")
+            
+            print(f"  🤖 LLM 호출 중... (프롬프트 길이: {len(prompt)}자)")
             response = self.rag.llm.invoke(prompt)
+            print(f"  ✅ LLM 응답 수신 완료")
             return response.content
         except Exception as e:
+            # 에러 로깅 추가
+            print(f"⚠️ LLM 수정 제안 생성 실패: {e}")
+            print(f"   프롬프트 길이: {len(prompt)}자")
+            print(f"   유사 사례 수: {len(similar_cases) if similar_cases else 0}")
+            import traceback
+            traceback.print_exc()
+            # 폴백: 위험 키워드 기반 간단한 제안
+            risk_keywords = []
+            if pattern_analysis and isinstance(pattern_analysis, dict):
+                matched_keywords = pattern_analysis.get('matched_keywords', [])
+                if matched_keywords and isinstance(matched_keywords, list):
+                    for kw in matched_keywords[:3]:
+                        if isinstance(kw, dict):
+                            keyword = kw.get('keyword', '')
+                            if keyword:
+                                risk_keywords.append(keyword)
+                        elif isinstance(kw, str):
+                            risk_keywords.append(kw)
+            
             if risk_keywords:
                 return f"위험 키워드 제거/완화: {', '.join(risk_keywords)}"
             return "고의·중과실 책임 명시, 불가항력 구체화"

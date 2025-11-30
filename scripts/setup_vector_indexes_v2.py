@@ -1,11 +1,13 @@
 """
-Neo4j 벡터 인덱스 설정 v2.0
+Neo4j 벡터 인덱스 설정 v3.0 (이중 임베딩 전략)
 
 변경사항:
-1. 이중 임베딩 구조 지원 (embedding_violation + embedding_corrected)
+1. 4개 벡터 인덱스 생성 (base + finetuned)
+   - violation_embeddings_base, violation_embeddings_finetuned
+   - corrected_embeddings_base, corrected_embeddings_finetuned
 2. BAAI/bge-m3 모델 차원 (1024) 지원
 3. 불필요한 LawArticle, ViolationType 인덱스 제거
-4. 기존 모델(384/768 차원) 호환성 유지
+4. 레거시 인덱스(violation_embeddings, corrected_embeddings) 삭제 지원
 """
 
 from neo4j import GraphDatabase
@@ -57,8 +59,12 @@ class Neo4jVectorIndexManager:
         print("\n🗑️  기존 벡터 인덱스 삭제 중...")
 
         indexes_to_drop = [
-            'violation_embeddings',
-            'corrected_embeddings',
+            'violation_embeddings',  # 레거시
+            'corrected_embeddings',  # 레거시
+            'violation_embeddings_base',
+            'violation_embeddings_finetuned',
+            'corrected_embeddings_base',
+            'corrected_embeddings_finetuned',
             'law_embeddings',
             'violation_type_embeddings'
         ]
@@ -78,27 +84,27 @@ class Neo4jVectorIndexManager:
         similarity_function: str = 'cosine'
     ):
         """
-        이중 벡터 인덱스 생성
+        4개 벡터 인덱스 생성 (이중 임베딩 전략: base + finetuned)
 
         Args:
             embedding_dim: 임베딩 차원 (기본: 1024, bge-m3)
             similarity_function: 유사도 함수 ('cosine', 'euclidean', 'dot_product')
         """
         print("="*80)
-        print(f"🔧 이중 벡터 인덱스 생성 중... (차원: {embedding_dim})")
+        print(f"🔧 4개 벡터 인덱스 생성 중... (차원: {embedding_dim})")
         print("="*80)
 
-        # 1. violation_embeddings: 위반 문장 검색용
-        print(f"\n1️⃣  violation_embeddings 인덱스 생성...")
-        print(f"   - 속성: embedding_violation")
+        # 1. violation_embeddings_base: 위반 문장 검색용 (Base 모델)
+        print(f"\n1️⃣  violation_embeddings_base 인덱스 생성...")
+        print(f"   - 속성: embedding_violation_base")
         print(f"   - 차원: {embedding_dim}")
         print(f"   - 유사도: {similarity_function}")
 
         try:
             self.execute_query(f"""
-            CREATE VECTOR INDEX violation_embeddings IF NOT EXISTS
+            CREATE VECTOR INDEX violation_embeddings_base IF NOT EXISTS
             FOR (v:ViolationCase)
-            ON v.embedding_violation
+            ON v.embedding_violation_base
             OPTIONS {{
                 indexConfig: {{
                     `vector.dimensions`: {embedding_dim},
@@ -106,21 +112,21 @@ class Neo4jVectorIndexManager:
                 }}
             }}
             """)
-            print("   ✅ violation_embeddings 생성 완료")
+            print("   ✅ violation_embeddings_base 생성 완료")
         except Exception as e:
-            print(f"   ❌ violation_embeddings 생성 실패: {e}")
+            print(f"   ❌ violation_embeddings_base 생성 실패: {e}")
 
-        # 2. corrected_embeddings: 준수 문장 검색용 (신규!)
-        print(f"\n2️⃣  corrected_embeddings 인덱스 생성... ⭐ 신규")
-        print(f"   - 속성: embedding_corrected")
+        # 2. violation_embeddings_finetuned: 위반 문장 검색용 (Finetuned 모델)
+        print(f"\n2️⃣  violation_embeddings_finetuned 인덱스 생성...")
+        print(f"   - 속성: embedding_violation_finetuned")
         print(f"   - 차원: {embedding_dim}")
         print(f"   - 유사도: {similarity_function}")
 
         try:
             self.execute_query(f"""
-            CREATE VECTOR INDEX corrected_embeddings IF NOT EXISTS
+            CREATE VECTOR INDEX violation_embeddings_finetuned IF NOT EXISTS
             FOR (v:ViolationCase)
-            ON v.embedding_corrected
+            ON v.embedding_violation_finetuned
             OPTIONS {{
                 indexConfig: {{
                     `vector.dimensions`: {embedding_dim},
@@ -128,11 +134,55 @@ class Neo4jVectorIndexManager:
                 }}
             }}
             """)
-            print("   ✅ corrected_embeddings 생성 완료")
+            print("   ✅ violation_embeddings_finetuned 생성 완료")
         except Exception as e:
-            print(f"   ❌ corrected_embeddings 생성 실패: {e}")
+            print(f"   ❌ violation_embeddings_finetuned 생성 실패: {e}")
 
-        print("\n✅ 이중 벡터 인덱스 생성 완료!\n")
+        # 3. corrected_embeddings_base: 준수 문장 검색용 (Base 모델)
+        print(f"\n3️⃣  corrected_embeddings_base 인덱스 생성...")
+        print(f"   - 속성: embedding_corrected_base")
+        print(f"   - 차원: {embedding_dim}")
+        print(f"   - 유사도: {similarity_function}")
+
+        try:
+            self.execute_query(f"""
+            CREATE VECTOR INDEX corrected_embeddings_base IF NOT EXISTS
+            FOR (v:ViolationCase)
+            ON v.embedding_corrected_base
+            OPTIONS {{
+                indexConfig: {{
+                    `vector.dimensions`: {embedding_dim},
+                    `vector.similarity_function`: '{similarity_function}'
+                }}
+            }}
+            """)
+            print("   ✅ corrected_embeddings_base 생성 완료")
+        except Exception as e:
+            print(f"   ❌ corrected_embeddings_base 생성 실패: {e}")
+
+        # 4. corrected_embeddings_finetuned: 준수 문장 검색용 (Finetuned 모델)
+        print(f"\n4️⃣  corrected_embeddings_finetuned 인덱스 생성...")
+        print(f"   - 속성: embedding_corrected_finetuned")
+        print(f"   - 차원: {embedding_dim}")
+        print(f"   - 유사도: {similarity_function}")
+
+        try:
+            self.execute_query(f"""
+            CREATE VECTOR INDEX corrected_embeddings_finetuned IF NOT EXISTS
+            FOR (v:ViolationCase)
+            ON v.embedding_corrected_finetuned
+            OPTIONS {{
+                indexConfig: {{
+                    `vector.dimensions`: {embedding_dim},
+                    `vector.similarity_function`: '{similarity_function}'
+                }}
+            }}
+            """)
+            print("   ✅ corrected_embeddings_finetuned 생성 완료")
+        except Exception as e:
+            print(f"   ❌ corrected_embeddings_finetuned 생성 실패: {e}")
+
+        print("\n✅ 4개 벡터 인덱스 생성 완료!\n")
 
     def create_property_indexes(self):
         """속성 인덱스 생성 (빠른 검색용)"""
@@ -214,9 +264,9 @@ class Neo4jVectorIndexManager:
 
         query = """
         MATCH (v:ViolationCase)
-        WHERE v.embedding_violation IS NOT NULL
-        RETURN size(v.embedding_violation) as violation_dim,
-               size(v.embedding_corrected) as corrected_dim
+        WHERE v.embedding_violation_base IS NOT NULL
+        RETURN size(v.embedding_violation_base) as violation_dim,
+               size(v.embedding_corrected_base) as corrected_dim
         LIMIT 1
         """
 
@@ -227,8 +277,8 @@ class Neo4jVectorIndexManager:
                 corrected_dim = result[0].get('corrected_dim', 'N/A')
 
                 print(f"\n현재 임베딩 차원:")
-                print(f"   - embedding_violation: {violation_dim}차원")
-                print(f"   - embedding_corrected: {corrected_dim}차원")
+                print(f"   - embedding_violation_base: {violation_dim}차원")
+                print(f"   - embedding_corrected_base: {corrected_dim}차원")
                 print()
 
                 # 권장사항 출력

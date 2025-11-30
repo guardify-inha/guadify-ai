@@ -5,13 +5,17 @@ Fine-tuned BAAI/bge-m3 모델을 사용하여 Neo4j 그래프 재구성
 1. 임베딩 모델: paraphrase-multilingual-MiniLM-L12-v2 (384차원)
    → BAAI/bge-m3 fine-tuned (1024차원)
 
-2. 이중 임베딩 구조:
-   - embedding_violation: original_text (위반 문장) 임베딩
-   - embedding_corrected: corrected_text (준수 문장) 임베딩
+2. 이중 임베딩 구조 (4개 필드):
+   - embedding_violation_base: Base 모델로 계산한 위반 조항 임베딩
+   - embedding_violation_finetuned: Finetuned 모델로 계산한 위반 조항 임베딩
+   - embedding_corrected_base: Base 모델로 계산한 수정 조항 임베딩
+   - embedding_corrected_finetuned: Finetuned 모델로 계산한 수정 조항 임베딩
 
-3. 이중 벡터 인덱스:
-   - violation_embeddings: 위반 문장 검색용
-   - corrected_embeddings: 준수 문장 검색용 (새로 추가!)
+3. 4개 벡터 인덱스:
+   - violation_embeddings_base: 위반 문장 검색용 (Base 모델)
+   - violation_embeddings_finetuned: 위반 문장 검색용 (Finetuned 모델)
+   - corrected_embeddings_base: 준수 문장 검색용 (Base 모델)
+   - corrected_embeddings_finetuned: 준수 문장 검색용 (Finetuned 모델)
 """
 
 import pandas as pd
@@ -41,25 +45,40 @@ class GraphRAGRebuilder:
     def __init__(
         self,
         neo4j_connector,
-        model_path='./my_fine_tuned_model'
+        model_path_base=None,
+        model_path_finetuned=None
     ):
         """
         Args:
             neo4j_connector: Neo4j 커넥터
-            model_path: Fine-tuned 모델 경로 (기본: ./my_fine_tuned_model)
+            model_path_base: Base 모델 경로 (기본: config.settings에서 읽음)
+            model_path_finetuned: Finetuned 모델 경로 (기본: config.settings에서 읽음)
         """
         self.conn = neo4j_connector
 
-        print(f"🧠 모델 로드 중: {model_path}")
-        self.model = SentenceTransformer(model_path)
+        # config.settings에서 모델 경로 읽기
+        from config.settings import settings
+        model_path_base = model_path_base or settings.EMBEDDING_MODEL_BASE
+        model_path_finetuned = model_path_finetuned or settings.EMBEDDING_MODEL_FINETUNED
 
-        embedding_dim = self.model.get_sentence_embedding_dimension()
-        print(f"✅ 모델 로드 완료 (임베딩 차원: {embedding_dim})")
+        print(f"🧠 Base 모델 로드 중: {model_path_base}")
+        self.base_model = SentenceTransformer(model_path_base)
+        base_dim = self.base_model.get_sentence_embedding_dimension()
+        print(f"✅ Base 모델 로드 완료 (임베딩 차원: {base_dim})")
 
-        if embedding_dim != 1024:
-            print(f"⚠️  경고: 임베딩 차원이 {embedding_dim}차원입니다. bge-m3는 1024차원이어야 합니다.")
+        print(f"🧠 Finetuned 모델 로드 중: {model_path_finetuned}")
+        self.finetuned_model = SentenceTransformer(model_path_finetuned)
+        finetuned_dim = self.finetuned_model.get_sentence_embedding_dimension()
+        print(f"✅ Finetuned 모델 로드 완료 (임베딩 차원: {finetuned_dim})")
 
-        self.embedding_dim = embedding_dim
+        if base_dim != 1024 or finetuned_dim != 1024:
+            print(f"⚠️  경고: 임베딩 차원이 일치하지 않습니다. bge-m3는 1024차원이어야 합니다.")
+            print(f"   Base: {base_dim}차원, Finetuned: {finetuned_dim}차원")
+
+        self.embedding_dim = base_dim  # 두 모델 모두 같은 차원이어야 함
+
+        # 하위 호환성을 위해 self.model도 base 모델로 설정
+        self.model = self.base_model
 
         # 패턴 데이터 로드
         self._load_patterns()
@@ -162,17 +181,17 @@ class GraphRAGRebuilder:
         print("\n✅ ViolationCase 데이터 삭제 완료 (법률 구조 보존됨)\n")
 
     def create_vector_indexes(self):
-        """벡터 인덱스 생성 (이중 인덱스)"""
+        """벡터 인덱스 생성 (4개 인덱스: base + finetuned)"""
         print("\n" + "="*80)
-        print("📊 벡터 인덱스 생성 중...")
+        print("📊 벡터 인덱스 생성 중 (4개 인덱스)")
         print("="*80)
 
-        # 1. 위반 문장 인덱스
-        print(f"\n1️⃣  violation_embeddings 인덱스 생성 ({self.embedding_dim}차원)")
-        query_violation = f"""
-        CREATE VECTOR INDEX violation_embeddings IF NOT EXISTS
+        # 1. 위반 문장 - Base 모델 인덱스
+        print(f"\n1️⃣  violation_embeddings_base 인덱스 생성 ({self.embedding_dim}차원)")
+        query_violation_base = f"""
+        CREATE VECTOR INDEX violation_embeddings_base IF NOT EXISTS
         FOR (v:ViolationCase)
-        ON v.embedding_violation
+        ON v.embedding_violation_base
         OPTIONS {{
             indexConfig: {{
                 `vector.dimensions`: {self.embedding_dim},
@@ -180,15 +199,15 @@ class GraphRAGRebuilder:
             }}
         }}
         """
-        self.conn.execute_query(query_violation)
-        print("   ✅ violation_embeddings 인덱스 생성 완료")
+        self.conn.execute_query(query_violation_base)
+        print("   ✅ violation_embeddings_base 인덱스 생성 완료")
 
-        # 2. 준수 문장 인덱스 (새로 추가!)
-        print(f"\n2️⃣  corrected_embeddings 인덱스 생성 ({self.embedding_dim}차원)")
-        query_corrected = f"""
-        CREATE VECTOR INDEX corrected_embeddings IF NOT EXISTS
+        # 2. 위반 문장 - Finetuned 모델 인덱스
+        print(f"\n2️⃣  violation_embeddings_finetuned 인덱스 생성 ({self.embedding_dim}차원)")
+        query_violation_finetuned = f"""
+        CREATE VECTOR INDEX violation_embeddings_finetuned IF NOT EXISTS
         FOR (v:ViolationCase)
-        ON v.embedding_corrected
+        ON v.embedding_violation_finetuned
         OPTIONS {{
             indexConfig: {{
                 `vector.dimensions`: {self.embedding_dim},
@@ -196,10 +215,42 @@ class GraphRAGRebuilder:
             }}
         }}
         """
-        self.conn.execute_query(query_corrected)
-        print("   ✅ corrected_embeddings 인덱스 생성 완료")
+        self.conn.execute_query(query_violation_finetuned)
+        print("   ✅ violation_embeddings_finetuned 인덱스 생성 완료")
 
-        print("\n✅ 모든 벡터 인덱스 생성 완료\n")
+        # 3. 준수 문장 - Base 모델 인덱스
+        print(f"\n3️⃣  corrected_embeddings_base 인덱스 생성 ({self.embedding_dim}차원)")
+        query_corrected_base = f"""
+        CREATE VECTOR INDEX corrected_embeddings_base IF NOT EXISTS
+        FOR (v:ViolationCase)
+        ON v.embedding_corrected_base
+        OPTIONS {{
+            indexConfig: {{
+                `vector.dimensions`: {self.embedding_dim},
+                `vector.similarity_function`: 'cosine'
+            }}
+        }}
+        """
+        self.conn.execute_query(query_corrected_base)
+        print("   ✅ corrected_embeddings_base 인덱스 생성 완료")
+
+        # 4. 준수 문장 - Finetuned 모델 인덱스
+        print(f"\n4️⃣  corrected_embeddings_finetuned 인덱스 생성 ({self.embedding_dim}차원)")
+        query_corrected_finetuned = f"""
+        CREATE VECTOR INDEX corrected_embeddings_finetuned IF NOT EXISTS
+        FOR (v:ViolationCase)
+        ON v.embedding_corrected_finetuned
+        OPTIONS {{
+            indexConfig: {{
+                `vector.dimensions`: {self.embedding_dim},
+                `vector.similarity_function`: 'cosine'
+            }}
+        }}
+        """
+        self.conn.execute_query(query_corrected_finetuned)
+        print("   ✅ corrected_embeddings_finetuned 인덱스 생성 완료")
+
+        print("\n✅ 모든 벡터 인덱스 생성 완료 (4개 인덱스)\n")
 
     def load_and_filter_csv(self, csv_path: str) -> pd.DataFrame:
         """CSV 로드 및 필터링"""
@@ -222,28 +273,38 @@ class GraphRAGRebuilder:
         return df_valid
 
     def generate_dual_embeddings(self, df: pd.DataFrame) -> Dict:
-        """이중 임베딩 생성 (violation + corrected)"""
+        """4개 임베딩 생성 (violation_base, violation_finetuned, corrected_base, corrected_finetuned)"""
         print("\n" + "="*80)
-        print("🧠 이중 임베딩 생성 중...")
+        print("🧠 이중 임베딩 생성 중 (Base + Finetuned 모델)")
         print("="*80)
 
         embeddings = {}
-
-        # 1️⃣ 위반 문장 임베딩
-        print("\n1️⃣  위반 문장 (original_text) 임베딩...")
         violation_texts = df['불공정 약관 원문'].tolist()
-        embeddings['violation'] = self.model.encode(
+        corrected_texts = df['수정 후 약관 조항'].tolist()
+
+        # 1️⃣ 위반 문장 - Base 모델
+        print("\n1️⃣  위반 문장 (original_text) - Base 모델 임베딩...")
+        embeddings['violation_base'] = self.base_model.encode(
             violation_texts,
             show_progress_bar=True,
             batch_size=32,
-            normalize_embeddings=True  # 코사인 유사도 최적화
+            normalize_embeddings=True
         )
         print(f"   ✅ {len(violation_texts)}개 임베딩 완료")
 
-        # 2️⃣ 준수 문장 임베딩 (새로 추가!)
-        print("\n2️⃣  준수 문장 (corrected_text) 임베딩...")
-        corrected_texts = df['수정 후 약관 조항'].tolist()
-        embeddings['corrected'] = self.model.encode(
+        # 2️⃣ 위반 문장 - Finetuned 모델
+        print("\n2️⃣  위반 문장 (original_text) - Finetuned 모델 임베딩...")
+        embeddings['violation_finetuned'] = self.finetuned_model.encode(
+            violation_texts,
+            show_progress_bar=True,
+            batch_size=32,
+            normalize_embeddings=True
+        )
+        print(f"   ✅ {len(violation_texts)}개 임베딩 완료")
+
+        # 3️⃣ 준수 문장 - Base 모델
+        print("\n3️⃣  준수 문장 (corrected_text) - Base 모델 임베딩...")
+        embeddings['corrected_base'] = self.base_model.encode(
             corrected_texts,
             show_progress_bar=True,
             batch_size=32,
@@ -251,14 +312,26 @@ class GraphRAGRebuilder:
         )
         print(f"   ✅ {len(corrected_texts)}개 임베딩 완료")
 
-        print(f"\n✅ 이중 임베딩 생성 완료")
-        print(f"   - violation: {embeddings['violation'].shape}")
-        print(f"   - corrected: {embeddings['corrected'].shape}\n")
+        # 4️⃣ 준수 문장 - Finetuned 모델
+        print("\n4️⃣  준수 문장 (corrected_text) - Finetuned 모델 임베딩...")
+        embeddings['corrected_finetuned'] = self.finetuned_model.encode(
+            corrected_texts,
+            show_progress_bar=True,
+            batch_size=32,
+            normalize_embeddings=True
+        )
+        print(f"   ✅ {len(corrected_texts)}개 임베딩 완료")
+
+        print(f"\n✅ 4개 임베딩 생성 완료")
+        print(f"   - violation_base: {embeddings['violation_base'].shape}")
+        print(f"   - violation_finetuned: {embeddings['violation_finetuned'].shape}")
+        print(f"   - corrected_base: {embeddings['corrected_base'].shape}")
+        print(f"   - corrected_finetuned: {embeddings['corrected_finetuned'].shape}\n")
 
         return embeddings
 
     def create_nodes(self, df: pd.DataFrame, embeddings: Dict, id_offset: int = 0):
-        """노드 생성 (이중 임베딩 포함)"""
+        """노드 생성 (4개 임베딩 필드 포함)"""
         print("\n" + "="*80)
         print("📦 ViolationCase 노드 생성 중...")
         print("="*80)
@@ -266,10 +339,13 @@ class GraphRAGRebuilder:
         for idx, row in tqdm(df.iterrows(), total=len(df), desc="노드 생성"):
             case_id = f"CASE_{id_offset + idx + 1}"
 
-            # 이중 임베딩 추출
-            embedding_violation = embeddings['violation'][idx].tolist()
-            embedding_corrected = embeddings['corrected'][idx].tolist()
+            # 4개 임베딩 추출
+            embedding_violation_base = embeddings['violation_base'][idx].tolist()
+            embedding_violation_finetuned = embeddings['violation_finetuned'][idx].tolist()
+            embedding_corrected_base = embeddings['corrected_base'][idx].tolist()
+            embedding_corrected_finetuned = embeddings['corrected_finetuned'][idx].tolist()
 
+            # 4개 임베딩 필드만 생성 (레거시 필드 제거)
             query = """
             CREATE (v:ViolationCase {
                 id: $id,
@@ -282,8 +358,10 @@ class GraphRAGRebuilder:
                 subcategory: $subcategory,
                 article_id: $article_id,
                 other_legal_basis: $other_legal_basis,
-                embedding_violation: $embedding_violation,
-                embedding_corrected: $embedding_corrected
+                embedding_violation_base: $embedding_violation_base,
+                embedding_violation_finetuned: $embedding_violation_finetuned,
+                embedding_corrected_base: $embedding_corrected_base,
+                embedding_corrected_finetuned: $embedding_corrected_finetuned
             })
             """
 
@@ -298,11 +376,13 @@ class GraphRAGRebuilder:
                 'subcategory': row.get('소주제', ''),
                 'article_id': self._extract_article_id(row.get('근거 조항(약관법)', '')),
                 'other_legal_basis': row.get('근거 조항(약관법 외)', ''),
-                'embedding_violation': embedding_violation,
-                'embedding_corrected': embedding_corrected
+                'embedding_violation_base': embedding_violation_base,
+                'embedding_violation_finetuned': embedding_violation_finetuned,
+                'embedding_corrected_base': embedding_corrected_base,
+                'embedding_corrected_finetuned': embedding_corrected_finetuned
             })
 
-        print(f"✅ {len(df)}개 노드 생성 완료\n")
+        print(f"✅ {len(df)}개 노드 생성 완료 (4개 임베딩 필드 포함)\n")
 
 
     
@@ -442,12 +522,12 @@ class GraphRAGRebuilder:
         
         Args:
             df: DataFrame
-            embeddings: 임베딩 딕셔너리 (violation 키 사용)
+            embeddings: 임베딩 딕셔너리 (violation_base 키 사용)
         """
         print("  - 유사도 행렬 계산 중...")
         
-        # violation 임베딩 사용
-        violation_embeddings = embeddings['violation']
+        # violation_base 임베딩 사용 (RAG 검색용)
+        violation_embeddings = embeddings['violation_base']
         similarity_matrix = cosine_similarity(violation_embeddings)
         
         print("  - SIMILAR_TO 관계 생성 중...")
@@ -619,12 +699,16 @@ class GraphRAGRebuilder:
         print("🎉 그래프 재구성 완료!")
         print("="*80)
         print(f"📊 총 {len(df_combined)}개 ViolationCase 노드 생성")
-        print(f"📊 이중 임베딩 구조:")
-        print(f"   - embedding_violation: {self.embedding_dim}차원 (위반 문장)")
-        print(f"   - embedding_corrected: {self.embedding_dim}차원 (준수 문장)")
-        print(f"\n🔍 벡터 인덱스:")
-        print(f"   - violation_embeddings (위반 검색용)")
-        print(f"   - corrected_embeddings (준수 검색용)")
+        print(f"📊 이중 임베딩 구조 (4개 필드):")
+        print(f"   - embedding_violation_base: {self.embedding_dim}차원 (위반 문장, Base 모델)")
+        print(f"   - embedding_violation_finetuned: {self.embedding_dim}차원 (위반 문장, Finetuned 모델)")
+        print(f"   - embedding_corrected_base: {self.embedding_dim}차원 (준수 문장, Base 모델)")
+        print(f"   - embedding_corrected_finetuned: {self.embedding_dim}차원 (준수 문장, Finetuned 모델)")
+        print(f"\n🔍 벡터 인덱스 (4개):")
+        print(f"   - violation_embeddings_base (위반 검색용, Base)")
+        print(f"   - violation_embeddings_finetuned (위반 검색용, Finetuned)")
+        print(f"   - corrected_embeddings_base (준수 검색용, Base)")
+        print(f"   - corrected_embeddings_finetuned (준수 검색용, Finetuned)")
         
         # 관계 통계
         print(f"\n📊 그래프 관계:")
@@ -660,10 +744,10 @@ if __name__ == "__main__":
     # Neo4j 연결
     conn = Neo4jConnector()
 
-    # Rebuilder 생성 (Hugging Face fine-tuned 모델 사용)
+    # Rebuilder 생성 (config.settings에서 두 모델 모두 읽음)
     rebuilder = GraphRAGRebuilder(
-        neo4j_connector=conn,
-        model_path='moksil/bge-m3-korean-contract-finetuned'  # Hugging Face 모델
+        neo4j_connector=conn
+        # model_path_base, model_path_finetuned는 config.settings에서 자동으로 읽음
     )
 
     # 그래프 재구성

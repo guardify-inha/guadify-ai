@@ -25,23 +25,19 @@ class Settings:
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
     # =========================================================================
-    # 임베딩 모델 설정
+    # 임베딩 모델 설정 (이중 임베딩 전략)
     # =========================================================================
     # 환경변수로 모델 전환:
     # - 기본: 'moksil/bge-m3-korean-contract-finetuned' (파인튜닝 모델)
     # - 베이스 모델: 'BAAI/bge-m3'
     # - 로컬 모델: './my_fine_tuned_model'
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+    
+    # 이중 임베딩 전략: Base 모델 (RAG 검색용)과 Finetuned 모델 (판단용)
+    EMBEDDING_MODEL_BASE = os.getenv("EMBEDDING_MODEL_BASE", "BAAI/bge-m3")
+    EMBEDDING_MODEL_FINETUNED = os.getenv("EMBEDDING_MODEL_FINETUNED", "moksil/bge-m3-korean-contract-finetuned-v2")
+    
     VECTOR_DIMENSION = 1024  # bge-m3 차원
 
-    # =========================================================================
-    # 벡터 인덱스 설정 (이중 임베딩)
-    # =========================================================================
-    VECTOR_INDEX_VIOLATION = "violation_embeddings"
-    VECTOR_INDEX_CORRECTED = "corrected_embeddings"
-
-    EMBEDDING_PROPERTY_VIOLATION = "embedding_violation"
-    EMBEDDING_PROPERTY_CORRECTED = "embedding_corrected"
 
     # =========================================================================
     # GraphRAG 설정
@@ -56,8 +52,8 @@ class Settings:
 
     THRESHOLDS = {
         'high_risk': 0.85,
-        'medium_risk': 0.75,
-        'low_risk': 0.65
+        'medium_risk': 0.8,
+        'low_risk': 0.75
     }
 
     # =========================================================================

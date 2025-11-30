@@ -1,142 +1,83 @@
-법률중심 그래프 사용
+# Guadify AI - 불공정 약관 판단 시스템
 
-# Step 1: 환경 설정
+GraphRAG 기반 불공정 약관 자동 판단 및 수정 제안 시스템
 
-pip install -r requirements.txt
+## 초기 구축 순서
 
-# Step 2: Neo4j 실행
+처음부터 시스템을 구축할 때 다음 순서대로 실행하세요:
 
-docker run -d --name neo4j-graphrag \
- -p 7474:7474 -p 7687:7687 \
- -e NEO4J_AUTH=neo4j/testpassword123 \
- -e NEO4J_PLUGINS='["apoc"]' \
- neo4j:5.14.0
+1. `pip install -r requirements.txt`
+2. `docker compose up -d`
+3. `.env` 파일 설정
+4. `python main.py`
+5. `python scripts/rebuild_graph.py`
+6. `streamlit run scripts/app.py`
 
-# Step 3: 법률 그래프 먼저 구축 (Law-Centric의 핵심!)
+## 환경 설정
 
-python main.py
-
-# Step 4: 벡터 인덱스 생성
-
-python scripts/setup_vector_indexes.py
-
-# Step 5: GraphRAG 그래프 구축 (이게 핵심!)
-
-python -c '
-from pipeline.graph*builder import GraphRAGBuilder
-from database.neo4j_connector import Neo4jConnector
-conn = Neo4jConnector()
-builder = GraphRAGBuilder(conn)
-builder.build_from_multiple_csv([
-"data/contracts/reference/보도자료*데이터*전처리*최종.csv",
-"data/contracts/reference/ai.csv"
-])
-conn.close()
-print("✅ Law-Centric GraphRAG 구축 완료!")
-'
-
-# Step 6: 테스트
-
-streamlit run scripts/app.py
-
----
-
-## 🔄 파인튜닝 적용 버전 실행 순서
-
-### 전체 워크플로우
-
-```
-1. 법률 그래프 구축
-   ↓
-2. 베이스 모델로 ViolationCase 그래프 구축
-   ↓
-3. 파인튜닝 실행
-   ↓
-4. 파인튜닝 모델로 임베딩 업데이트
-   ↓
-5. 테스트 및 검증
-```
-
-### 상세 실행 순서
-
-#### Step 1: 법률 그래프 구축
+### .env 파일 설정
 
 ```bash
-python main.py
+# Neo4j 데이터베이스 연결 정보
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=testpassword123
+
+# LLM 설정
+LLM_MODEL=gpt-4
+OPENAI_API_KEY=your_api_key_here
+
+# 이중 임베딩 전략: Base 모델 (RAG 검색용)과 Finetuned 모델 (판단용)
+EMBEDDING_MODEL_BASE=BAAI/bge-m3
+EMBEDDING_MODEL_FINETUNED=moksil/bge-m3-korean-contract-finetuned-v2
 ```
 
-- 법률 구조(법률 → 조 → 항 → 호) 구축
+## 이중 임베딩 전략
 
-#### Step 2: 베이스 모델로 ViolationCase 그래프 구축
+이 프로젝트는 **이중 임베딩 전략**을 사용합니다:
+
+- **Base 모델 (BAAI/bge-m3)**: RAG 검색용 - 유사 위반 사례 검색
+- **Finetuned 모델 (moksil/bge-m3-korean-contract-finetuned-v2)**: 판단용 - Prototypical Networks 기반 불공정도 계산
+
+### Neo4j 구조
+
+**4개 임베딩 필드**:
+
+- `embedding_violation_base`: Base 모델로 계산한 위반 조항 임베딩
+- `embedding_violation_finetuned`: Finetuned 모델로 계산한 위반 조항 임베딩
+- `embedding_corrected_base`: Base 모델로 계산한 수정 조항 임베딩
+- `embedding_corrected_finetuned`: Finetuned 모델로 계산한 수정 조항 임베딩
+
+**4개 벡터 인덱스**:
+
+- `violation_embeddings_base`
+- `violation_embeddings_finetuned`
+- `corrected_embeddings_base`
+- `corrected_embeddings_finetuned`
+
+## 주요 명령어
+
+### 그래프 구축
 
 ```bash
-python scripts/build_graph_base.py
+# 법률 그래프 구축
+python main.py
+
+# ViolationCase 그래프 구축 (이중 임베딩)
+python scripts/rebuild_graph.py
 ```
 
-- 베이스 모델(`BAAI/bge-m3`)로 이중 임베딩 생성
-- ViolationCase 노드 생성
-- 법률 관계(VIOLATES) 생성
-- 유사도 관계(SIMILAR_TO) 생성
+### 파인튜닝 (선택사항)
 
-#### Step 3: 파인튜닝 실행
+이미 파인튜닝된 모델을 사용 중이면 생략 가능합니다.
 
 ```bash
 python scripts/train_model.py
 ```
 
-- Neo4j에서 데이터 로드
-- Contrastive Learning으로 베이스 모델 파인튜닝
-- `./my_fine_tuned_model`에 저장
+## 주의사항
 
-#### Step 4: 파인튜닝 모델로 임베딩 업데이트
-
-```bash
-python scripts/update_embeddings.py
-```
-
-- 기존 ViolationCase 노드의 임베딩만 재계산
-- `embedding_violation`, `embedding_corrected` 업데이트
-- `SIMILAR_TO` 관계 재생성
-- 벡터 인덱스 재생성
-
-#### Step 5: 환경 설정 업데이트
-
-```bash
-# .env 파일 수정
-EMBEDDING_MODEL=./my_fine_tuned_model
-```
-
-#### Step 6: 테스트 및 검증
-
-```bash
-# 혼동행렬 테스트 (학습 데이터)
-python scripts/test_ai_csv.py
-
-# 혼동행렬 테스트 (테스트 데이터)
-python scripts/test_test_input.py
-
-# 조항별 테스트
-python scripts/test_with_test_input.py
-```
-
-### ⚠️ 주의사항
-
-1. **순서 준수**: 반드시 위 순서대로 실행해야 합니다.
-2. **베이스 모델 구축**: `build_graph_base.py`는 처음 한 번만 실행하면 됩니다.
-3. **임베딩 업데이트**: `update_embeddings.py`는 파인튜닝 후에만 실행합니다.
-4. **데이터 백업**: 중요한 데이터는 백업 후 진행하세요.
-
-### 🔄 재학습 시나리오
-
-베이스 모델로 다시 시작하려면:
-
-```bash
-# 1. 베이스 모델로 그래프 재구축
-python scripts/build_graph_base.py
-
-# 2. 파인튜닝
-python scripts/train_model.py
-
-# 3. 임베딩 업데이트
-python scripts/update_embeddings.py
-```
+1. **순서 준수**: 그래프 구축은 반드시 순서대로 실행해야 합니다.
+2. **환경변수 설정**: `.env` 파일에 `EMBEDDING_MODEL_BASE`와 `EMBEDDING_MODEL_FINETUNED`를 반드시 설정하세요.
+3. **모델 일관성**: RAG 검색은 base 모델, 판단은 finetuned 모델을 사용합니다.
+4. **CSV 파일 위치**: 기본 CSV 파일이 `data/contracts/reference/` 경로에 있어야 합니다.

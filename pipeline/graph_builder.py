@@ -25,7 +25,7 @@ import json
 class GraphRAGBuilder:
     """CSV → Law-Centric GraphRAG 변환 빌더"""
     
-    def __init__(self, neo4j_connector, embedding_model_name='paraphrase-multilingual-MiniLM-L12-v2'):
+    def __init__(self, neo4j_connector, embedding_model_name='BAAI/bge-m3'):
         self.conn = neo4j_connector
         self.model = SentenceTransformer(embedding_model_name)
         

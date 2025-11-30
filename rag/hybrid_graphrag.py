@@ -62,12 +62,19 @@ class HybridGraphRAG:
         # 임베딩 모델
         self.embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
-        # 로컬 임베딩 (Fine-tuned BAAI/bge-m3)
+        # 이중 임베딩 모델 로드 (Base + Finetuned)
         from sentence_transformers import SentenceTransformer
-        embedding_model = os.getenv('EMBEDDING_MODEL', 'moksil/bge-m3-korean-contract-finetuned')
-        self.local_model = SentenceTransformer(embedding_model)
+        from config.settings import settings
+        
+        # Base 모델 (RAG 검색용)
+        print(f"🔍 Base 모델 로드 중: {settings.EMBEDDING_MODEL_BASE}")
+        self.base_model = SentenceTransformer(settings.EMBEDDING_MODEL_BASE)
+        
+        # Finetuned 모델 (판단용)
+        print(f"🔍 Finetuned 모델 로드 중: {settings.EMBEDDING_MODEL_FINETUNED}")
+        self.finetuned_model = SentenceTransformer(settings.EMBEDDING_MODEL_FINETUNED)
 
-        # LangChain 호환성을 위한 래퍼
+        # LangChain 호환성을 위한 래퍼 클래스
         class EmbeddingWrapper:
             def __init__(self, model):
                 self.model = model
@@ -78,7 +85,15 @@ class HybridGraphRAG:
             def embed_documents(self, texts):
                 return self.model.encode(texts, normalize_embeddings=True).tolist()
 
-        self.local_embeddings = EmbeddingWrapper(self.local_model)
+        # Base 모델 래퍼 (RAG 검색용)
+        self.base_embeddings = EmbeddingWrapper(self.base_model)
+        
+        # Finetuned 모델 래퍼 (판단용)
+        self.finetuned_embeddings = EmbeddingWrapper(self.finetuned_model)
+        
+        # 하위 호환성: local_embeddings는 base_embeddings로 설정
+        self.local_embeddings = self.base_embeddings
+        self.local_model = self.base_model
         
         # 벡터 스토어 (Neo4j Vector Index)
         # retrieval_query로 id를 명시적으로 포함
@@ -98,15 +113,17 @@ class HybridGraphRAG:
         """
 
         try:
+            # Base 모델 및 base 필드 사용 (RAG 검색용)
+            print(f"🔍 벡터 스토어 초기화: embedding_violation_base 필드, violation_embeddings_base 인덱스 사용")
             self.vector_store = Neo4jVector.from_existing_graph(
-                self.local_embeddings,
+                self.base_embeddings,  # Base 모델 사용
                 "ViolationCase",
-                "embedding_violation",  # 이중 임베딩: violation
+                "embedding_violation_base",  # Base 모델 임베딩 필드
                 ["original_text", "violation_reason"],
                 url=self.neo4j_uri,
                 username=self.neo4j_user,
                 password=self.neo4j_password,
-                index_name="violation_embeddings",
+                index_name="violation_embeddings_base",  # Base 모델 인덱스
                 retrieval_query=retrieval_query
             )
         except Exception as e:
@@ -193,15 +210,18 @@ Cypher 쿼리만 반환하세요 (설명 없이):
             return self._fallback_search(query_text, top_k)
     
     def _fallback_search(self, query_text: str, top_k: int) -> List[Dict]:
-        """벡터 스토어 실패 시 폴백 검색"""
-        # 로컬 임베딩으로 검색
-        query_embedding = self.local_embeddings.embed_query(query_text)
+        """벡터 스토어 실패 시 폴백 검색 (Base 모델 사용)"""
+        print(f"🔍 Base 모델로 폴백 검색 수행")
+        # Base 모델 임베딩으로 검색
+        query_embedding = self.base_embeddings.embed_query(query_text)
         
-        # Neo4j에서 모든 사례 가져오기
+        # Neo4j에서 모든 사례 가져오기 (embedding_violation_base 필드 사용)
         query = """
         MATCH (v:ViolationCase)
         RETURN v.id as id, v.original_text as text,
-               v.article_id as article_id, v.embedding_violation as embedding
+               v.article_id as article_id, v.embedding_violation_base as embedding,
+               v.violation_reason as violation_reason,
+               v.corrected_text as corrected_text
         LIMIT 100
         """
         
@@ -219,6 +239,8 @@ Cypher 쿼리만 반환하세요 (설명 없이):
                     'id': r['id'],
                     'text': r['text'],
                     'article_id': r['article_id'],
+                    'violation_reason': r.get('violation_reason', ''),
+                    'corrected_text': r.get('corrected_text', ''),
                     'similarity_score': float(sim)
                 })
         
@@ -229,10 +251,20 @@ Cypher 쿼리만 반환하세요 (설명 없이):
             {
                 'document': type('obj', (object,), {
                     'page_content': s['text'],
-                    'metadata': {'id': s['id'], 'article_id': s['article_id']}
+                    'metadata': {
+                        'id': s['id'],
+                        'article_id': s['article_id'],
+                        'violation_reason': s.get('violation_reason', ''),
+                        'corrected_text': s.get('corrected_text', '')
+                    }
                 })(),
                 'similarity_score': s['similarity_score'],
-                'metadata': {'id': s['id'], 'article_id': s['article_id']}
+                'metadata': {
+                    'id': s['id'],
+                    'article_id': s['article_id'],
+                    'violation_reason': s.get('violation_reason', ''),
+                    'corrected_text': s.get('corrected_text', '')
+                }
             }
             for s in similarities[:top_k]
         ]
