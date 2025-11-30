@@ -158,11 +158,11 @@ if analyze_button and user_input.strip():
                 st.info(f"💬 {result['confidence_expression']}")
             
             # === Prototypical Networks 분석 (v8.1 전용) ===
-            if show_prototypical and 'primary_evidence' in result:
+            if show_prototypical and 'primary_evidence' in result and result['primary_evidence'] is not None:
                 evidence = result['primary_evidence']
                 
                 # Prototypical 정보가 있는지 확인
-                if evidence.get('method') in ['prototypical_networks_multi_prototype', 'prototypical_networks_single_prototype']:
+                if evidence and evidence.get('method') in ['prototypical_networks_multi_prototype', 'prototypical_networks_single_prototype']:
                     st.markdown("---")
                     st.subheader("🧬 Prototypical Networks 분석")
                     
@@ -295,7 +295,7 @@ if analyze_button and user_input.strip():
             st.markdown("---")
             st.subheader("📌 주요 근거")
             
-            if 'primary_evidence' in result:
+            if 'primary_evidence' in result and result['primary_evidence'] is not None:
                 evidence = result['primary_evidence']
 
                 # 유사도 분석
@@ -328,6 +328,8 @@ if analyze_button and user_input.strip():
                     st.caption(f"호: {ho}")
 
                 st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
+            else:
+                st.info("✅ 정상 판단으로 위반 관련 근거 정보가 없습니다.")
             
             # 패턴 분석 정보 (v8.1에서는 간소화됨)
             if 'patterns' in result:
@@ -380,19 +382,20 @@ if analyze_button and user_input.strip():
                         st.write(reasoning)
             
             # === 상세 설명 ===
-            st.markdown("---")
-            st.subheader("📝 상세 설명")
-            explanation = result.get('explanation', '')
-            if explanation:
-                st.write(explanation)
-            else:
-                st.caption("설명 없음")
+            if result['violation']:
+                st.markdown("---")
+                st.subheader("📝 상세 설명")
+                explanation = result.get('explanation')
+                if explanation:
+                    st.write(explanation)
+                else:
+                    st.caption("설명 없음")
             
             # === 수정 제안 ===
             if result['violation']:
                 st.markdown("---")
                 st.subheader("💡 수정 제안")
-                suggestion = result.get('suggestion', '')
+                suggestion = result.get('suggestion')
                 if suggestion:
                     st.info(suggestion)
                 else:

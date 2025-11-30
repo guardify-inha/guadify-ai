@@ -162,7 +162,8 @@ def main():
 
                     is_violation = result.get('violation', False)
                     confidence = result.get('confidence', 0.0)
-                    detected_article = result.get('primary_evidence', {}).get('article_id', None)
+                    primary_evidence = result.get('primary_evidence')
+                    detected_article = primary_evidence.get('article_id', None) if primary_evidence else None
 
                     # TN: 불공정을 불공정으로 판단 (정답)
                     correct = is_violation

@@ -252,7 +252,52 @@ class GraphRAGJudge:
         print(f"  표현: {confidence_expression}\n")
         
         # ==================================================================
-        # Phase 7: 설명 생성
+        # 정상 판단 시 위반 관련 처리 스킵
+        # ==================================================================
+        if not violation:
+            print("✅ 정상 판단 - 위반 관련 분석 및 LLM 생성 스킵\n")
+            
+            result = {
+                'violation': False,
+                'severity': 'none',
+                'confidence': final_score,
+                'confidence_expression': confidence_expression,
+                
+                # 기본 분석 정보만 포함
+                'patterns': {
+                    'matched_risk_keywords': pattern_analysis.get('matched_keywords', []) if isinstance(pattern_analysis, dict) else [],
+                    'risk_level_from_patterns': pattern_analysis.get('risk_level', 'unknown') if isinstance(pattern_analysis, dict) else 'unknown',
+                    'pattern_score': pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0,
+                },
+                
+                # LLM 판단 (기본 점수 계산만)
+                'llm_judgment': {
+                    'formula_score': formula_score,
+                    'adjusted_score': final_score,
+                    'reasoning': '정상 판단으로 위반 관련 분석 불필요',
+                    'is_reversed': False
+                },
+                
+                # 위반 관련 필드는 None 또는 빈 값
+                'primary_evidence': None,
+                'law_structure': None,
+                'explanation': None,
+                'suggestion': None,
+                'graph_propagation': None,
+                
+                # 메타데이터
+                'method': 'graphrag_v8.1_fixed',
+                'top_similar_cases': []
+            }
+            
+            print(f"{'='*70}")
+            print(f"✅ 판단 완료! (정상 판단)")
+            print(f"{'='*70}\n")
+            
+            return result
+        
+        # ==================================================================
+        # Phase 7: 설명 생성 (위반 판단 시에만)
         # ==================================================================
         print("📍 Phase 7: 설명 생성")
         print("-" * 70)
@@ -270,7 +315,7 @@ class GraphRAGJudge:
         print("✅ 설명 완료\n")
         
         # ==================================================================
-        # 최종 결과
+        # 최종 결과 (위반 판단 시)
         # ==================================================================
         
         result = {
@@ -995,12 +1040,8 @@ class GraphRAGJudge:
             return "위반이 명확히 판단됩니다"
         elif score >= 0.80:
             return "위반으로 강하게 추정됩니다"
-        elif score >= 0.70:
+        elif score >= 0.75:
             return "위반된 것으로 추정됩니다"
-        elif score >= 0.60:
-            return "위반 가능성이 있는 것으로 판단됩니다"
-        elif score >= 0.50:
-            return "위반 가능성을 배제할 수 없습니다"
         else:
             return "위반 가능성이 낮은 것으로 판단됩니다"
     
