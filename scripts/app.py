@@ -1,5 +1,5 @@
 """
-GraphRAG 기반 불공정 약관 판단 시스템 - Streamlit UI (v8.1 Compatible)
+AI 기반 불공정 약관 판단 시스템 - Streamlit UI (v8.1 Compatible)
 """
 import streamlit as st
 import sys
@@ -28,7 +28,7 @@ from judge.article_violation_scorer import ArticleViolationScorer
 
 # 페이지 설정
 st.set_page_config(
-    page_title="GraphRAG 약관 판단",
+    page_title="AI 기반 불공정 약관 판단",
     page_icon="⚖️",
     layout="wide"
 )
@@ -77,10 +77,10 @@ def get_judge():
         st.stop()
 
 # UI 시작
-st.title("⚖️ GraphRAG 기반 불공정 약관 판단 시스템")
+st.title("⚖️ AI 기반 불공정 약관 판단 시스템")
 
 st.markdown("""
-이 시스템은 **GraphRAG v8.1**을 사용합니다:
+
 - 🔍 Prototypical Networks 불공정도 계산
 - 📊 패턴 기반 위험도 분석  
 - 🧠 LLM 의미 반전 검증
@@ -94,15 +94,13 @@ with st.sidebar:
     user_input = st.text_area(
         "검사할 약관 조항:",
         value=default_text,
-        height=150,
+        height=400,
         placeholder="예: 회사는 고의 또는 중과실이 없는 한 손해배상 책임을 지지 않습니다."
     )
     
-    st.markdown("---")
-    
-    # 옵션
-    show_prototypical = st.checkbox("Prototypical 분석 표시", value=True)
-    show_raw = st.checkbox("Raw JSON 표시", value=False)
+    # 옵션 (UI에서 숨김 처리, 초기값 유지)
+    show_prototypical = True
+    show_raw = False
     
     st.markdown("---")
     
@@ -470,7 +468,7 @@ st.markdown("---")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.caption("🛠️ **GraphRAG v8.1**")
+    st.caption("🛠️ **Guadify AI v8.1**")
     st.caption("Neo4j + Prototypical Networks + OpenAI")
 
 with col2:
@@ -479,4 +477,4 @@ with col2:
 
 with col3:
     st.caption("⚡ **실시간 판단**")
-    st.caption("3단계 간소화 시스템")
+    st.caption("3단계 AI 시스템")
