@@ -15,8 +15,6 @@ sentence-transformers==2.2.2
 transformers==4.36.0
 huggingface-hub==0.20.3
 scikit-learn==1.7.2
-nltk==3.8.1
-faiss-cpu
 
 # === LangChain & OpenAI (LangChain 1.x / Neo4j 0.6.x) ===
 # LangChain 스택이 1.x 버전대로 메이저 업그레이드되었습니다.
@@ -27,11 +25,6 @@ langchain-community==0.4.1
 langchain-openai==1.0.2
 langchain-neo4j==0.6.0
 openai==1.109.1
-
-# === PDF / 문서 처리 ===
-# 이 섹션은 변경 사항이 없습니다.
-pdfplumber==0.10.3
-PyMuPDF==1.23.8
 
 # === Frontend / Visualization ===
 # streamlit이 numpy 2.x와 호환되도록 업그레이드되었습니다.

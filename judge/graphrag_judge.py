@@ -514,7 +514,7 @@ class GraphRAGJudge:
         query = """
         MATCH (v:ViolationCase)
         WHERE v.id IN $case_ids AND v.corrected_text IS NOT NULL
-        RETURN v.id as id, v.text as unfair_text, v.corrected_text as fair_text
+        RETURN v.id as id, v.original_text as unfair_text, v.corrected_text as fair_text
         LIMIT 5
         """
         

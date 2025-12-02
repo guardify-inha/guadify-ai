@@ -104,7 +104,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    analyze_button = st.button("🔍 판단하기", type="primary", use_container_width=True)
+    analyze_button = st.button("🔍 판단하기", type="primary", width='stretch')
     
     st.markdown("---")
     st.caption("💡 **환경 요구사항**")
@@ -267,7 +267,7 @@ if analyze_button and user_input.strip():
                     })
 
                 df_detailed = pd.DataFrame(detailed_data).sort_values('점수', ascending=False)
-                st.dataframe(df_detailed, use_container_width=True)
+                st.dataframe(df_detailed, width='stretch')
 
                 # 매칭 상세 (최고 점수 조항만)
                 if primary_score >= threshold:
