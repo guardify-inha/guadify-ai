@@ -15,6 +15,7 @@ sentence-transformers==2.2.2
 transformers==4.36.0
 huggingface-hub==0.20.3
 scikit-learn==1.7.2
+nltk==3.8.1
 
 # === LangChain & OpenAI (LangChain 1.x / Neo4j 0.6.x) ===
 # LangChain 스택이 1.x 버전대로 메이저 업그레이드되었습니다.
