@@ -80,7 +80,6 @@ def get_judge():
 st.title("⚖️ AI 기반 불공정 약관 판단 시스템")
 
 st.markdown("""
-
 - 🔍 Prototypical Networks 불공정도 계산
 - 📊 패턴 기반 위험도 분석  
 - 🧠 LLM 의미 반전 검증
@@ -104,7 +103,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    analyze_button = st.button("🔍 판단하기", type="primary", width='stretch')
+    analyze_button = st.button("🔍 판단하기", type="primary", use_container_width=True)
     
     st.markdown("---")
     st.caption("💡 **환경 요구사항**")
@@ -128,6 +127,21 @@ if analyze_button and user_input.strip():
             # === 결과 표시 ===
             st.markdown("---")
             st.subheader("📊 판단 결과")
+            
+            # ✅ 전처리 정보 표시 (수정됨: 요약 숨김, 다중 조항 시 원문만 표시)
+            if 'preprocessing' in result:
+                preprocessing = result['preprocessing']
+                
+                # 다중 조항인 경우에만 경고 표시
+                if preprocessing.get('is_multiple_clauses'):
+                    st.warning(f"⚠️ **여러 조항이 감지되어 첫 번째 조항만 분석했습니다**")
+                    
+                    with st.expander("📝 분석에 사용된 조항 확인", expanded=True):
+                        st.markdown("**실제 분석에 사용된 조항 (첫 번째 조항 원문):**")
+                        # 요약본(final_input)은 보여주지 않고, 추출된 조항 원문(first_clause_raw)만 보여줍니다.
+                        st.text_area("", value=preprocessing['first_clause_raw'], height=80, disabled=True, label_visibility="collapsed")
+                
+                # needs_summary가 True여도 사용자에게는 알리지 않음 (UI 유지)
             
             # 메트릭 3개
             col1, col2, col3 = st.columns(3)
@@ -267,7 +281,7 @@ if analyze_button and user_input.strip():
                     })
 
                 df_detailed = pd.DataFrame(detailed_data).sort_values('점수', ascending=False)
-                st.dataframe(df_detailed, width='stretch')
+                st.dataframe(df_detailed, use_container_width=True)
 
                 # 매칭 상세 (최고 점수 조항만)
                 if primary_score >= threshold:

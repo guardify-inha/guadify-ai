@@ -40,6 +40,125 @@ class GraphRAGJudge:
         
         # 패턴 JSON 로드
         self._load_patterns()
+
+
+
+    def _preprocess_user_input(self, user_text: str) -> Dict:
+        """
+        사용자 입력 전처리 (JSON 출력 방식 적용)
+        - 여러 조항 감지
+        - 첫 번째 조항만 추출
+        - 50자 이하로 요약
+        """
+        print(f"\n{'='*70}")
+        print(f"🔄 입력 전처리 시작")
+        print(f"{'='*70}\n")
+        print(f"원본 입력 ({len(user_text)}자):\n{user_text}\n")
+
+        # 1. JSON 포맷을 강제하는 새로운 프롬프트
+        prompt = f"""
+        당신은 '불공정 약관 심사'를 위해 법률 텍스트를 전처리하는 AI입니다.
+        입력된 텍스트를 분석하여 [다중 조항 여부 판단] -> [대상 조항 확정] -> [핵심 요약] 과정을 수행하고
+        결과를 반드시 **JSON 형식**으로 출력하세요.
+
+        [입력 텍스트]
+        {user_text}
+
+        [판단 기준 가이드라인]
+        1. 다중 조항 vs 단일 조항 (is_multiple_clauses)
+        - **False (단일 조항)**: 
+            - 문장이 여러 개여도 '주제(Topic)'가 연속되는 경우.
+            - 구조: [원칙+예외], [부과+환불], [의무+절차], [설명+보충].
+            - 예시: "연회비는 1년 단위 청구입니다. 중도해지 시 잔여분은 환불합니다." (연회비라는 한 주제이므로 단일 조항)
+        - **True (다중 조항)**: 
+            - 서로 완전히 다른 주제나 권리/의무가 나열된 경우.
+
+        2. 대상 조항 추출
+        - 다중 조항이면 첫 번째 의미 단위만 추출, 단일 조항이면 전체 사용.
+
+        3. 요약 규칙 (final_text)
+        - 50자 미만으로 압축하되, **법적 효력이 있는 조건(단서, 예외, 숫자, 기한)**은 절대 생략 금지.
+        - 불필요한 수식어나 존칭만 생략.
+
+        [응답 형식 - JSON Only]
+        반드시 아래 JSON 포맷으로만 응답하고, 마크다운이나 추가 설명은 하지 마세요.
+        {{
+        "is_multiple_clauses": boolean,
+        "reasoning": "판단 근거 및 처리 내용 요약",
+        "first_clause_raw": "추출된 조항 원문 (다중 조항 아니면 전체)",
+        "needs_summary": boolean, 
+        "final_text": "50자 이하 요약본 또는 원문"
+        }}
+        """
+
+        try:
+            # 2. LLM 호출
+            response = self.rag.llm.invoke(prompt)
+            content = response.content.strip()
+
+            # 3. JSON 파싱 전처리 (LLM이 ```json ... ``` 으로 감싸서 줄 때가 많음)
+            if "```" in content:
+                # 첫 번째 { 와 마지막 } 사이의 문자열만 추출
+                match = re.search(r'\{.*\}', content, re.DOTALL)
+                if match:
+                    content = match.group(0)
+                else:
+                    # 정규식 실패 시 마크다운 제거 시도
+                    content = content.replace("```json", "").replace("```", "").strip()
+
+            # 4. 문자열을 실제 딕셔너리로 변환
+            result_json = json.loads(content)
+
+            # 5. 결과 변수 매핑
+            is_multiple = result_json.get("is_multiple_clauses", False)
+            first_clause_raw = result_json.get("first_clause_raw", user_text)
+            needs_summary = result_json.get("needs_summary", False)
+            final_input = result_json.get("final_text", user_text)
+            processing_note = result_json.get("reasoning", "처리 내용 없음")
+
+            print(f"✅ 전처리 완료:")
+            print(f"  - 다중 조항 여부: {is_multiple}")
+            print(f"  - 첫 번째 조항 원문 ({len(first_clause_raw)}자): {first_clause_raw[:30]}...")
+            print(f"  - 요약 필요 여부: {needs_summary}")
+            print(f"  - 최종 입력 ({len(final_input)}자): {final_input}")
+            print(f"  - 처리 설명: {processing_note}\n")
+
+            return {
+                'is_multiple_clauses': is_multiple,
+                'first_clause_raw': first_clause_raw,
+                'needs_summary': needs_summary,
+                'final_input': final_input,
+                'processing_note': processing_note,
+                'original_length': len(user_text),
+                'final_length': len(final_input)
+            }
+
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON 파싱 실패: {e}")
+            print(f"⚠️ LLM 응답: {content}")
+            # 파싱 실패 시 원본 반환 (안전장치)
+            return {
+                'is_multiple_clauses': False,
+                'first_clause_raw': user_text,
+                'needs_summary': False,
+                'final_input': user_text,
+                'processing_note': 'JSON 파싱 실패 - 원본 사용',
+                'original_length': len(user_text),
+                'final_length': len(user_text)
+            }
+            
+        except Exception as e:
+            print(f"⚠️ 입력 전처리 중 알 수 없는 오류: {e}")
+            return {
+                'is_multiple_clauses': False,
+                'first_clause_raw': user_text,
+                'needs_summary': False,
+                'final_input': user_text,
+                'processing_note': f'오류 발생: {str(e)}',
+                'original_length': len(user_text),
+                'final_length': len(user_text)
+            }
+
     
     def _load_patterns(self):
         """patterns_by_article_v2.json 로드"""
@@ -74,6 +193,11 @@ class GraphRAGJudge:
         print(f"🔍 약관 판단 시작 (v8.1 - Fixed)")
         print(f"{'='*70}\n")
         print(f"입력: {user_text[:100]}...\n")
+
+        preprocessing_result = self._preprocess_user_input(user_text)
+        processed_text = preprocessing_result['final_input']
+    
+        print(f"입력 (전처리 후): {processed_text[:100]}...\n")
         
         # ==================================================================
         # Phase 0: 패턴 기반 사전 분석
@@ -81,7 +205,7 @@ class GraphRAGJudge:
         print("📍 Phase 0: 패턴 기반 위험도 분석")
         print("-" * 70)
         
-        pattern_analysis = self._analyze_with_patterns(user_text)
+        pattern_analysis = self._analyze_with_patterns(processed_text)
         
         # pattern_analysis 안전하게 처리
         matched_count = len(pattern_analysis.get('matched_keywords', [])) if isinstance(pattern_analysis, dict) else 0
@@ -99,7 +223,7 @@ class GraphRAGJudge:
         print("-" * 70)
         
         similar_cases = self.rag.search_similar_cases(
-            user_text,
+            processed_text,
             top_k=10,
             similarity_threshold=0.6
         )
@@ -113,7 +237,7 @@ class GraphRAGJudge:
         if not similar_cases:
             # 유사 사례 없음 → DB 전체 prototype 사용 (공정 약관용)
             relative_unfairness = self._calculate_prototypical_unfairness_from_db(
-                user_text,
+                processed_text,
                 pattern_analysis
             )
             # 조항 정보는 None
@@ -135,7 +259,7 @@ class GraphRAGJudge:
                 unfair_similarity = 0.0
 
             relative_unfairness = self._calculate_prototypical_unfairness(
-                user_text,
+                processed_text,
                 similar_cases,  # 여러 사례 전달
                 best_case_id
             )
@@ -183,7 +307,7 @@ class GraphRAGJudge:
         print("-" * 70)
         
         graph_propagation_score = self._calculate_graph_propagation_score(
-            user_text=user_text,
+            processed_text=processed_text,
             similar_cases=similar_cases,
             best_case_id=best_case_id
         )
@@ -220,7 +344,7 @@ class GraphRAGJudge:
         print("-" * 70)
         
         llm_judgment = self._llm_semantic_reversal_check(
-            user_text=user_text,
+            processed_text=processed_text,
             formula_score=formula_score,
             unfair_similarity=unfair_similarity,
             relative_unfairness=relative_unfairness,
@@ -262,6 +386,7 @@ class GraphRAGJudge:
                 'severity': 'none',
                 'confidence': final_score,
                 'confidence_expression': confidence_expression,
+                'preprocessing': preprocessing_result,
                 
                 # 기본 분석 정보만 포함
                 'patterns': {
@@ -303,7 +428,7 @@ class GraphRAGJudge:
         print("-" * 70)
         
         explanation = self._generate_explanation(
-            user_text=user_text,
+            processed_text=processed_text,
             best_match=best_match,
             similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
             final_score=final_score,
@@ -323,6 +448,7 @@ class GraphRAGJudge:
             'severity': severity,
             'confidence': final_score,
             'confidence_expression': confidence_expression,
+            'preprocessing': preprocessing_result,
             
             # 핵심 근거
             'primary_evidence': {
@@ -369,7 +495,7 @@ class GraphRAGJudge:
             
             # 수정 제안 (수정됨)
             'suggestion': self._generate_suggestion(
-                user_text=user_text,  # 추가
+                processed_text=processed_text,  # 추가
                 similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
                 pattern_analysis=pattern_analysis,
                 law_structure_info=law_structure_info
@@ -400,7 +526,7 @@ class GraphRAGJudge:
 
     def _calculate_prototypical_unfairness_from_db(
         self,
-        user_text: str,
+        processed_text: str,
         pattern_analysis: Dict
     ) -> Dict:
         """
@@ -438,7 +564,7 @@ class GraphRAGJudge:
             }
 
         # 2. 사용자 텍스트 임베딩 (Finetuned 모델 사용)
-        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(processed_text))
 
         # 3. Unfair prototype: embedding_violation들의 평균
         unfair_embeddings = [np.array(r['unfair_emb']) for r in results if r.get('unfair_emb')]
@@ -487,7 +613,7 @@ class GraphRAGJudge:
 
     def _calculate_prototypical_unfairness(
         self,
-        user_text: str,
+        processed_text: str,
         similar_cases: List[Dict],
         best_unfair_case_id: str
     ) -> Dict:
@@ -549,7 +675,7 @@ class GraphRAGJudge:
             }
         
         # 4. 임베딩 생성 (Finetuned 모델 사용)
-        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(processed_text))
         
         # Unfair prototype: 여러 unfair 사례의 평균 (Finetuned 모델 사용)
         unfair_embeddings = [np.array(self.rag.finetuned_embeddings.embed_query(text)) for text in unfair_texts]
@@ -601,7 +727,7 @@ class GraphRAGJudge:
     
     def _calculate_single_case_unfairness(
         self,
-        user_text: str,
+        processed_text: str,
         best_unfair_case_id: str
     ) -> Dict:
         """Fallback: 단일 사례 기반 불공정도 계산 (Finetuned 모델 사용)"""
@@ -617,7 +743,7 @@ class GraphRAGJudge:
         
         if not result or not result[0].get('corrected_text'):
             # 수정본도 없으면 유사도만 사용
-            user_emb = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
+            user_emb = np.array(self.rag.finetuned_embeddings.embed_query(processed_text))
             
             # 최소한의 거리 추정
             return {
@@ -633,7 +759,7 @@ class GraphRAGJudge:
         unfair_text = result[0].get('unfair_text', '')
         
         # 단일 prototype 사용 (Finetuned 모델 사용)
-        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(user_text))
+        user_embedding = np.array(self.rag.finetuned_embeddings.embed_query(processed_text))
         unfair_prototype = np.array(self.rag.finetuned_embeddings.embed_query(unfair_text)) if unfair_text else None
         fair_prototype = np.array(self.rag.finetuned_embeddings.embed_query(corrected_text))
         
@@ -717,7 +843,7 @@ class GraphRAGJudge:
     # 패턴 분석
     # ======================================================================
     
-    def _analyze_with_patterns(self, user_text: str) -> Dict:
+    def _analyze_with_patterns(self, processed_text: str) -> Dict:
         """patterns_by_article_v2.json 패턴 분석"""
         if not self.patterns:
             return {
@@ -736,7 +862,7 @@ class GraphRAGJudge:
         if 'keywords' in universal:
             for kw_info in universal['keywords']:
                 keyword = kw_info['keyword']
-                if keyword in user_text:
+                if keyword in processed_text:
                     matched_keywords.append({
                         'keyword': keyword,
                         'risk_level': kw_info['risk_level'],
@@ -747,7 +873,7 @@ class GraphRAGJudge:
         
         if 'regex_patterns' in universal:
             for pattern_info in universal['regex_patterns']:
-                if re.search(pattern_info['regex'], user_text):
+                if re.search(pattern_info['regex'], processed_text):
                     matched_keywords.append({
                         'keyword': pattern_info['keyword'],
                         'risk_level': pattern_info['risk_level'],
@@ -769,7 +895,7 @@ class GraphRAGJudge:
             for pattern in article_data.get('patterns', []):
                 high_risk_matched = 0
                 for kw in pattern.get('high_risk_keywords', []):
-                    if kw in user_text:
+                    if kw in processed_text:
                         high_risk_matched += 1
                         matched_keywords.append({
                             'keyword': kw,
@@ -779,7 +905,7 @@ class GraphRAGJudge:
                             'method': 'string'
                         })
                 
-                normal_matched = sum(1 for kw in pattern.get('keywords', []) if kw in user_text)
+                normal_matched = sum(1 for kw in pattern.get('keywords', []) if kw in processed_text)
                 
                 if high_risk_matched > 0:
                     article_score += high_risk_matched * 0.3
@@ -788,7 +914,7 @@ class GraphRAGJudge:
             
             if 'regex_patterns' in article_data:
                 for pattern_info in article_data['regex_patterns']:
-                    if re.search(pattern_info['regex'], user_text):
+                    if re.search(pattern_info['regex'], processed_text):
                         matched_keywords.append({
                             'keyword': pattern_info['keyword'],
                             'risk_level': pattern_info['risk_level'],
@@ -920,7 +1046,7 @@ class GraphRAGJudge:
     
     def _llm_semantic_reversal_check(
         self,
-        user_text: str,
+        processed_text: str,
         formula_score: float,
         unfair_similarity: float,
         relative_unfairness: Dict,
@@ -976,7 +1102,7 @@ class GraphRAGJudge:
         prompt = f"""당신은 약관 전문가입니다. 다음 약관 조항의 의미 반전 여부만 검증해주세요.
 
 [분석 대상]
-{user_text}
+{processed_text}
 
 [수식 기반 분석 결과]
 {evidence}
@@ -1045,7 +1171,7 @@ class GraphRAGJudge:
         else:
             return "위반 가능성이 낮은 것으로 판단됩니다"
     
-    def _fallback_judgment_with_patterns(self, pattern_analysis: Dict, user_text: str) -> Dict:
+    def _fallback_judgment_with_patterns(self, pattern_analysis: Dict, processed_text: str) -> Dict:
         """유사 사례 없을 때 패턴만으로 판단"""
         pattern_score = pattern_analysis['pattern_score']
         risk_level = pattern_analysis['risk_level']
@@ -1202,7 +1328,7 @@ class GraphRAGJudge:
     
     def _generate_explanation(
         self,
-        user_text: str,
+        processed_text: str,
         best_match: Dict,
         similar_cases: List[Dict],  # 추가
         final_score: float,
@@ -1243,7 +1369,7 @@ class GraphRAGJudge:
 다음 약관 조항을 정밀 분석하여 법적 위험성을 설명해주세요.
 
 [검토 대상 약관]
-{user_text}
+{processed_text}
 
 [관련 법령/가이드라인]
 {law_structure_info.get('full_path', '관련 법령 정보 없음')}
@@ -1291,7 +1417,7 @@ class GraphRAGJudge:
     
     def _generate_suggestion(
         self,
-        user_text: str,  # 추가
+        processed_text: str,  # 추가
         similar_cases: List[Dict],  # 추가
         pattern_analysis: Dict,
         law_structure_info: Dict
@@ -1309,7 +1435,7 @@ class GraphRAGJudge:
         print(f"  📝 포맷팅된 수정 조항 텍스트 길이: {len(corrected_examples)}자")
         
         prompt = f"""[검토 대상 약관]
-{user_text}
+{processed_text}
 
 [위반 혐의]
 {law_structure_info.get('full_path', 'Unknown')}
@@ -1370,7 +1496,7 @@ class GraphRAGJudge:
     
     def _calculate_graph_propagation_score(
         self,
-        user_text: str,
+        processed_text: str,
         similar_cases: List[Dict],
         best_case_id: str
     ) -> Dict:
