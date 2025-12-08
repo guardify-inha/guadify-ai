@@ -41,6 +41,89 @@ class GraphRAGJudge:
         # 패턴 JSON 로드
         self._load_patterns()
     
+    def _get_article_content(self, article_id: str) -> str:
+        """조항 ID로부터 조항의 전체 내용(본문 + 항 + 호)을 Graph에서 가져오기"""
+        try:
+            # 1. 조 노드 기본 정보 가져오기
+            article_query = """
+            MATCH (article:조 {id: $article_id})
+            RETURN article.title as title, article.content as content
+            LIMIT 1
+            """
+            
+            article_result = self.conn.execute_query(article_query, {'article_id': article_id})
+            if not article_result:
+                return ""
+            
+            article_data = article_result[0]
+            content_parts = []
+            
+            # 조 제목
+            title = article_data.get('title', '')
+            if title:
+                content_parts.append(f"【{article_id} {title}】")
+            
+            # 조 본문
+            content = article_data.get('content', '')
+            if content:
+                content_parts.append(content)
+            
+            # 2. 조에 연결된 항들 가져오기
+            hang_query = """
+            MATCH (article:조 {id: $article_id})-[:HAS_HANG]->(hang:항)
+            RETURN hang.id as hang_id, hang.hang_num as hang_num, hang.content as content
+            ORDER BY hang.hang_num
+            """
+            
+            hangs = self.conn.execute_query(hang_query, {'article_id': article_id})
+            
+            if hangs:
+                # 항이 있는 경우 (제6조)
+                for hang in hangs:
+                    hang_num = hang.get('hang_num', '')
+                    hang_content = hang.get('content', '')
+                    hang_id = hang.get('hang_id', '')
+                    
+                    if hang_content:
+                        content_parts.append(f"\n{hang_num}: {hang_content}")
+                    
+                    # 항 아래 호들 가져오기
+                    ho_from_hang_query = """
+                    MATCH (hang:항 {id: $hang_id})-[:HAS_HO]->(ho:호)
+                    RETURN ho.id as ho_id, ho.ho_num as ho_num, ho.content as content
+                    ORDER BY ho.ho_num
+                    """
+                    
+                    hos_from_hang = self.conn.execute_query(ho_from_hang_query, {'hang_id': hang_id})
+                    
+                    for ho in hos_from_hang:
+                        ho_num = ho.get('ho_num', '')
+                        ho_content = ho.get('content', '')
+                        if ho_content:
+                            content_parts.append(f"  {ho_num}: {ho_content}")
+            else:
+                # 항이 없는 경우: 조에 직접 연결된 호들 가져오기
+                ho_direct_query = """
+                MATCH (article:조 {id: $article_id})-[:HAS_HO]->(ho:호)
+                WHERE ho.hang_id IS NULL
+                RETURN ho.id as ho_id, ho.ho_num as ho_num, ho.content as content
+                ORDER BY ho.ho_num
+                """
+                
+                hos_direct = self.conn.execute_query(ho_direct_query, {'article_id': article_id})
+                
+                for ho in hos_direct:
+                    ho_num = ho.get('ho_num', '')
+                    ho_content = ho.get('content', '')
+                    if ho_content:
+                        content_parts.append(f"\n{ho_num}: {ho_content}")
+            
+            return "\n".join(content_parts)
+            
+        except Exception as e:
+            print(f"⚠️ Graph에서 조항 내용 가져오기 실패 ({article_id}): {e}")
+            return ""
+    
     def _load_patterns(self):
         """patterns_by_article_v2.json 로드"""
         try:
@@ -164,15 +247,30 @@ class GraphRAGJudge:
                 'ho_content': '유사 사례 없음',
                 'full_path': 'N/A'
             }
-            print(f"⏭️  유사 사례 없음 - 조항 분석 스킵\n")
         else:
             law_structure_info = self._analyze_law_structure(best_case_id)
 
-            print(f"✅ 위반 조항: {law_structure_info['article']}")
-            if law_structure_info.get('hang'):
-                print(f"   항: {law_structure_info['hang']}")
-            if law_structure_info.get('ho'):
-                print(f"   호: {law_structure_info['ho']}")
+        # [수정] 패턴 기반 최고 위반 조항으로 덮어쓰기 (사용자 요청)
+        top_pattern_article = None
+        if pattern_analysis and isinstance(pattern_analysis, dict) and 'article_hints' in pattern_analysis and pattern_analysis['article_hints']:
+             top_pattern_article = pattern_analysis['article_hints'][0]
+        
+        if top_pattern_article:
+            print(f"🔄 위반 조항 정보 변경 (유사사례 → 패턴기반): {law_structure_info.get('article', 'N/A')} → {top_pattern_article}")
+            law_structure_info['article'] = top_pattern_article
+            law_structure_info['full_path'] = f"약관 규제에 관한 법률 {top_pattern_article}"
+            law_structure_info['hang'] = None
+            law_structure_info['ho'] = None
+            law_structure_info['ho_content'] = f"{top_pattern_article} 위반 의심 (패턴 분석 기반)"
+            # 조항 내용 추가
+            article_content = self._get_article_content(top_pattern_article)
+            law_structure_info['article_content'] = article_content if article_content else ""
+
+        # 최종 출력
+        print(f"✅ 위반 조항: {law_structure_info['article']}")
+        if law_structure_info.get('full_path'):
+            print(f"   전체 경로: {law_structure_info['full_path']}")
+        if law_structure_info.get('ho_content'):
             print(f"   상세: {law_structure_info.get('ho_content', 'N/A')[:100]}...\n")
         
         # ==================================================================
@@ -870,14 +968,19 @@ class GraphRAGJudge:
             
             if fallback_result and fallback_result[0].get('article_id'):
                 article_id = fallback_result[0]['article_id']
+                # 조항 내용 가져오기
+                article_content = ""
+                if article_id and article_id != 'Unknown':
+                    article_content = self._get_article_content(article_id)
                 return {
                     'article': article_id or 'Unknown',
                     'article_title': '',
                     'full_path': article_id if article_id else 'Unknown',
-                    'ho_content': ''
+                    'ho_content': '',
+                    'article_content': article_content
                 }
             
-            return {'article': 'Unknown', 'article_title': '', 'full_path': 'Unknown', 'ho_content': ''}
+            return {'article': 'Unknown', 'article_title': '', 'full_path': 'Unknown', 'ho_content': '', 'article_content': ''}
         
         data = result[0]
         target_type = data.get('target_type', '')
@@ -905,13 +1008,19 @@ class GraphRAGJudge:
         
         full_path = ' '.join([str(p) for p in path_parts if p and str(p).strip()])
         
+        # 조항 내용 가져오기
+        article_content = ""
+        if article_id and article_id != 'Unknown':
+            article_content = self._get_article_content(article_id)
+        
         return {
             'article': article_id,
             'article_title': article_title,
             'hang': hang_id,
             'ho': ho_id,
             'ho_content': ho_content,
-            'full_path': full_path if full_path else 'Unknown'
+            'full_path': full_path if full_path else 'Unknown',
+            'article_content': article_content
         }
     
     # ======================================================================
@@ -1239,6 +1348,19 @@ class GraphRAGJudge:
                 except Exception:
                     pass
         
+        # 조항 내용 가져오기
+        article_content = law_structure_info.get('article_content', '')
+        article_section = ""
+        if article_content:
+            article_section = f"""
+[위반 혐의 조항의 법령 내용]
+다음은 검토 대상 약관이 위반한 것으로 판단된 법령 조항의 전문입니다. 이 내용을 참고하여 정확한 법적 근거를 제시하세요.
+
+---
+{article_content}
+---
+"""
+        
         prompt = f"""당신은 공정거래위원회의 불공정 약관 심사 전문가입니다.
 다음 약관 조항을 정밀 분석하여 법적 위험성을 설명해주세요.
 
@@ -1247,7 +1369,7 @@ class GraphRAGJudge:
 
 [관련 법령/가이드라인]
 {law_structure_info.get('full_path', '관련 법령 정보 없음')}
-
+{article_section}
 [유사 위반 사례 및 시정 내역]
 이 조항과 유사한 과거 위반 사례들입니다. 특히 '시정 요청 사유'를 주의 깊게 참고하세요.
 
@@ -1262,13 +1384,22 @@ class GraphRAGJudge:
 
 2. **법적 문제점 분석**:
    - 발견된 위험 키워드: {', '.join(risk_keywords) if risk_keywords else '없음'}
+   - 위반 혐의 조항의 법령 내용을 참고하여, 검토 대상 약관이 구체적으로 어떤 법령 조항의 어느 부분을 위반하는지 명확히 지적하세요.
    - 유사 사례의 '시정 요청 사유'와 비교하여, 검토 대상 약관이 구체적으로 어떤 면에서 불공정한지 논리적으로 설명하세요.
 
 3. **심사 결론**:
    - 해당 조항이 고객에게 부당하게 불리한지, 법률 규정을 위반하는지 명확히 서술하세요.
+   - 위반 혐의 조항의 법령 내용을 직접 인용하여 법적 근거를 제시하세요.
 
 결과는 전문적이고 객관적인 어조로 작성하며, 추측보다는 근거에 기반하여 작성하세요.
 """
+        
+        # 프롬프트 콘솔 출력
+        print(f"\n{'='*70}")
+        print("📝 [설명 생성 프롬프트]")
+        print(f"{'='*70}")
+        print(prompt)
+        print(f"{'='*70}\n")
         
         try:
             # LLM 초기화 확인
@@ -1308,12 +1439,25 @@ class GraphRAGJudge:
         corrected_examples = self._format_corrected_clauses_for_suggestion(similar_cases)
         print(f"  📝 포맷팅된 수정 조항 텍스트 길이: {len(corrected_examples)}자")
         
+        # 조항 내용 가져오기
+        article_content = law_structure_info.get('article_content', '')
+        article_section = ""
+        if article_content:
+            article_section = f"""
+[위반 혐의 조항의 법령 내용]
+다음은 검토 대상 약관이 위반한 것으로 판단된 법령 조항의 전문입니다. 이 내용을 준수하여 수정 제안을 작성하세요.
+
+---
+{article_content}
+---
+"""
+        
         prompt = f"""[검토 대상 약관]
 {user_text}
 
 [위반 혐의]
 {law_structure_info.get('full_path', 'Unknown')}
-
+{article_section}
 [참고: 유사 조항의 실제 수정 사례]
 다음은 유사한 불공정 조항들이 실제로 시정된 후의 문구들입니다. 이를 패턴으로 참고하세요:
 
@@ -1321,15 +1465,24 @@ class GraphRAGJudge:
 {corrected_examples}
 ---
 
-위 참고 사례들을 바탕으로 검토 대상 약관을 공정하게 수정한 조항을 제시하세요.
+위 참고 사례들과 위반 혐의 조항의 법령 내용을 바탕으로 검토 대상 약관을 공정하게 수정한 조항을 제시하세요.
 
 [작성 형식]
 **수정 전**: (검토 대상 약관 원문)
 **수정 후**: (법적 위험을 제거한 구체적인 수정 조항)
-**수정 이유**: (어떤 불공정 요소를 제거하기 위해 어떻게 문구를 변경했는지 1-2문장으로 설명)
+**수정 이유**: (위반 혐의 조항의 법령 내용을 참고하여, 어떤 불공정 요소를 제거하기 위해 어떻게 문구를 변경했는지 1-2문장으로 설명)
 
-주의: 문맥상 어색하지 않고 즉시 사용할 수 있는 완성된 문장으로 작성하세요.
+주의: 
+- 위반 혐의 조항의 법령 내용을 준수하여 수정하세요.
+- 문맥상 어색하지 않고 즉시 사용할 수 있는 완성된 문장으로 작성하세요.
 """
+        
+        # 프롬프트 콘솔 출력
+        print(f"\n{'='*70}")
+        print("💡 [수정 제안 프롬프트]")
+        print(f"{'='*70}")
+        print(prompt)
+        print(f"{'='*70}\n")
         
         try:
             # LLM 초기화 확인

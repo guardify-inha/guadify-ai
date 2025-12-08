@@ -312,20 +312,20 @@ if analyze_button and user_input.strip():
                 if 'prototypical' in method:
                     st.caption("✨ Prototypical Networks 적용")
                 
-                # 법률 구조 정보
-                st.markdown("**위반 조항**")
-                article_id = evidence.get('article_id', 'Unknown')
-                st.write(f"조항: **{article_id}**")
-                
-                hang = evidence.get('hang')
-                if hang:
-                    st.caption(f"항: {hang}")
-                
-                ho = evidence.get('ho')
-                if ho:
-                    st.caption(f"호: {ho}")
+                # 법률 구조 정보 (사용자 요청으로 숨김)
+                # st.markdown("**위반 조항**")
+                # article_id = evidence.get('article_id', 'Unknown')
+                # st.write(f"조항: **{article_id}**")
+                #
+                # hang = evidence.get('hang')
+                # if hang:
+                #     st.caption(f"항: {hang}")
+                #
+                # ho = evidence.get('ho')
+                # if ho:
+                #     st.caption(f"호: {ho}")
 
-                st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
+                # st.caption(f"최상위 사례 ID: `{evidence.get('best_match_id', 'N/A')}`")
             else:
                 st.info("✅ 정상 판단으로 위반 관련 근거 정보가 없습니다.")
             
@@ -395,7 +395,11 @@ if analyze_button and user_input.strip():
                 st.subheader("💡 수정 제안")
                 suggestion = result.get('suggestion')
                 if suggestion:
-                    st.info(suggestion)
+                    # 줄바꿈 처리를 위해 마크다운으로 렌더링
+                    formatted_suggestion = suggestion.replace("수정 전:", "\n\n**수정 전**:") \
+                                                   .replace("수정 후:", "\n\n**수정 후**:") \
+                                                   .replace("수정 이유:", "\n\n**수정 이유**:")
+                    st.markdown(formatted_suggestion)
                 else:
                     st.caption("수정 제안 없음")
             
