@@ -45,15 +45,15 @@ class Settings:
     TEMPERATURE = 0.5  # Prototypical Networks temperature
 
     SCORE_WEIGHTS = {
-        'unfair': 0.35,
-        'relative': 0.50,
-        'pattern_json': 0.15
+        'unfair': 0.3,
+        'relative': 0.5,
+        'pattern_json': 0.2
     }
 
     THRESHOLDS = {
-        'high_risk': 0.85,
-        'medium_risk': 0.8,
-        'low_risk': 0.75
+        'high_risk': 0.8,
+        'medium_risk': 0.7,
+        'low_risk': 0.6
     }
 
     # =========================================================================

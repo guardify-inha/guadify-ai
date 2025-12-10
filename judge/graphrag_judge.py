@@ -151,8 +151,14 @@ class GraphRAGJudge:
             print(f"⚠️ 패턴 로드 실패: {e}")
             self.patterns = {}
     
-    def judge_clause(self, user_text: str) -> Dict:
-        """약관 조항 종합 판단"""
+    def judge_clause(self, user_text: str, primary_score: float = None, skip_llm_generation: bool = False) -> Dict:
+        """약관 조항 종합 판단
+        
+        Args:
+            user_text: 분석할 약관 텍스트
+            primary_score: 조항별 위반도 분석의 최고 위반 조항 점수 (None이면 내부 계산)
+            skip_llm_generation: True면 설명/수정제안 생성 스킵 (빠른 계산만 수행)
+        """
         print(f"\n{'='*70}")
         print(f"🔍 약관 판단 시작 (v8.1 - Fixed)")
         print(f"{'='*70}\n")
@@ -169,11 +175,21 @@ class GraphRAGJudge:
         # pattern_analysis 안전하게 처리
         matched_count = len(pattern_analysis.get('matched_keywords', [])) if isinstance(pattern_analysis, dict) else 0
         risk_level = pattern_analysis.get('risk_level', 'unknown') if isinstance(pattern_analysis, dict) else 'unknown'
-        pattern_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
         
-        print(f"✅ 매칭 키워드: {matched_count}개")
-        print(f"   위험도: {risk_level}")
-        print(f"   패턴 점수: {pattern_score:.3f}\n")
+        # primary_score가 제공되면 그것을 사용, 아니면 내부 계산값 사용
+        if primary_score is not None:
+            pattern_score = primary_score
+            # pattern_analysis에도 반영 (결과에 사용됨)
+            if isinstance(pattern_analysis, dict):
+                pattern_analysis['pattern_score'] = primary_score
+            print(f"✅ 매칭 키워드: {matched_count}개")
+            print(f"   위험도: {risk_level}")
+            print(f"   패턴 점수 (조항별 위반도 분석에서 가져옴): {pattern_score:.3f}\n")
+        else:
+            pattern_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
+            print(f"✅ 매칭 키워드: {matched_count}개")
+            print(f"   위험도: {risk_level}")
+            print(f"   패턴 점수: {pattern_score:.3f}\n")
         
         # ==================================================================
         # Phase 1: 불공정 사례 벡터 검색
@@ -277,36 +293,43 @@ class GraphRAGJudge:
         # ==================================================================
         # Phase 2.5: 🆕 GraphRAG - Law-Centric Network Propagation Score
         # ==================================================================
-        print("📍 Phase 2.5: 🆕 GraphRAG 네트워크 전파 점수 (실험적)")
-        print("-" * 70)
+        # 주석처리: graph_propagation_score 사용 안 함
+        # print("📍 Phase 2.5: 🆕 GraphRAG 네트워크 전파 점수 (실험적)")
+        # print("-" * 70)
+        # 
+        # graph_propagation_score = self._calculate_graph_propagation_score(
+        #     user_text=user_text,
+        #     similar_cases=similar_cases,
+        #     best_case_id=best_case_id
+        # )
+        # 
+        # print(f"✅ 그래프 네트워크 점수: {graph_propagation_score['score']:.3f}")
+        # print(f"   방법: {graph_propagation_score['method']}")
+        # print(f"   연결된 케이스 수: {graph_propagation_score.get('connected_cases', 0)}")
+        # print(f"   법률 노드 경유 경로: {graph_propagation_score.get('law_paths', 0)}")
+        # print(f"   해석: {graph_propagation_score['interpretation']}\n")
         
-        graph_propagation_score = self._calculate_graph_propagation_score(
-            user_text=user_text,
-            similar_cases=similar_cases,
-            best_case_id=best_case_id
-        )
-        
-        print(f"✅ 그래프 네트워크 점수: {graph_propagation_score['score']:.3f}")
-        print(f"   방법: {graph_propagation_score['method']}")
-        print(f"   연결된 케이스 수: {graph_propagation_score.get('connected_cases', 0)}")
-        print(f"   법률 노드 경유 경로: {graph_propagation_score.get('law_paths', 0)}")
-        print(f"   해석: {graph_propagation_score['interpretation']}\n")
+        graph_propagation_score = None  # 사용 안 함
         
         # Phase 4: 간소화된 수식 기반 종합 점수 계산
         # ==================================================================
-        print("📍 Phase 4: 종합 점수 계산 (4가지 요소)")
+        print("📍 Phase 4: 종합 점수 계산 (3가지 요소)")
         print("-" * 70)
         
         # 안전하게 값 추출
-        pattern_json_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
+        # primary_score가 제공되면 그것을 사용, 아니면 내부 계산값 사용
+        if primary_score is not None:
+            pattern_json_score = primary_score
+        else:
+            pattern_json_score = pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0
         unfairness_score = relative_unfairness.get('unfairness_score', 0.0) if isinstance(relative_unfairness, dict) else 0.0
-        graph_score = graph_propagation_score.get('score', 0.0) if isinstance(graph_propagation_score, dict) else 0.0
+        # graph_score = graph_propagation_score.get('score', 0.0) if isinstance(graph_propagation_score, dict) else 0.0  # 주석처리: 사용 안 함
         
         formula_score = self._calculate_simplified_score(
             unfair_similarity=unfair_similarity,
             relative_unfairness=unfairness_score,
             pattern_json_score=pattern_json_score,
-            graph_propagation_score=graph_score  # 🆕 추가
+            graph_propagation_score=0.0  # 사용 안 함
         )
         
         print(f"  최종 수식 점수: {formula_score:.3f}\n")
@@ -395,22 +418,41 @@ class GraphRAGJudge:
             return result
         
         # ==================================================================
-        # Phase 7: 설명 생성 (위반 판단 시에만)
+        # Phase 7: 설명 생성 (위반 판단 시에만, skip_llm_generation이 False일 때만)
         # ==================================================================
-        print("📍 Phase 7: 설명 생성")
-        print("-" * 70)
+        explanation = None
+        suggestion = None
         
-        explanation = self._generate_explanation(
-            user_text=user_text,
-            best_match=best_match,
-            similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
-            final_score=final_score,
-            pattern_analysis=pattern_analysis,
-            law_structure_info=law_structure_info,
-            confidence_expression=confidence_expression
-        )
-        
-        print("✅ 설명 완료\n")
+        if not skip_llm_generation:
+            print("📍 Phase 7: 설명 생성")
+            print("-" * 70)
+            
+            explanation = self._generate_explanation(
+                user_text=user_text,
+                best_match=best_match,
+                similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
+                final_score=final_score,
+                pattern_analysis=pattern_analysis,
+                law_structure_info=law_structure_info,
+                confidence_expression=confidence_expression
+            )
+            
+            print("✅ 설명 완료\n")
+            
+            # 수정 제안 생성
+            print("📍 Phase 8: 수정 제안 생성")
+            print("-" * 70)
+            
+            suggestion = self._generate_suggestion(
+                user_text=user_text,
+                similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
+                pattern_analysis=pattern_analysis,
+                law_structure_info=law_structure_info
+            )
+            
+            print("✅ 수정 제안 완료\n")
+        else:
+            print("⏭️ LLM 생성 스킵 (skip_llm_generation=True)\n")
         
         # ==================================================================
         # 최종 결과 (위반 판단 시)
@@ -442,19 +484,13 @@ class GraphRAGJudge:
                 'pattern_score': pattern_analysis.get('pattern_score', 0.0) if isinstance(pattern_analysis, dict) else 0.0,
             },
             
-            # 🆕 GraphRAG 네트워크 분석
-            'graph_propagation': {
-                'score': graph_propagation_score.get('score', 0.0) if isinstance(graph_propagation_score, dict) else 0.0,
-                'method': graph_propagation_score.get('method', 'unknown') if isinstance(graph_propagation_score, dict) else 'unknown',
-                'connected_cases': graph_propagation_score.get('connected_cases', 0) if isinstance(graph_propagation_score, dict) else 0,
-                'law_paths': graph_propagation_score.get('law_paths', 0) if isinstance(graph_propagation_score, dict) else 0,
-                'interpretation': graph_propagation_score.get('interpretation', '') if isinstance(graph_propagation_score, dict) else ''
-            },
+            # 🆕 GraphRAG 네트워크 분석 (사용 안 함)
+            'graph_propagation': None,
             
             # 법률 구조
             'law_structure': law_structure_info,
             
-            # 상세 설명
+            # 상세 설명 (LLM 생성 스킵 시 None)
             'explanation': explanation,
             
             # LLM 판단
@@ -465,13 +501,8 @@ class GraphRAGJudge:
                 'is_reversed': is_reversed
             },
             
-            # 수정 제안 (수정됨)
-            'suggestion': self._generate_suggestion(
-                user_text=user_text,  # 추가
-                similar_cases=similar_cases if similar_cases else [],  # 빈 리스트로 안전하게 처리
-                pattern_analysis=pattern_analysis,
-                law_structure_info=law_structure_info
-            ),
+            # 수정 제안 (LLM 생성 스킵 시 None)
+            'suggestion': suggestion,
             
             # 메타데이터
             'method': 'graphrag_v8.1_fixed',
@@ -491,6 +522,86 @@ class GraphRAGJudge:
         print(f"{'='*70}\n")
         
         return result
+    
+    def _prepare_similar_cases_from_result(self, result: Dict) -> Tuple[List[Dict], Dict]:
+        """result에서 similar_cases와 best_match 복원"""
+        top_similar_cases = result.get('top_similar_cases', [])
+        best_match = None
+        similar_cases = []
+        
+        # top_similar_cases를 similar_cases 형식으로 변환
+        if top_similar_cases:
+            for case in top_similar_cases:
+                # 간단한 형식으로 변환 (_generate_explanation에서 사용하는 형식)
+                similar_cases.append({
+                    'metadata': {
+                        'id': case.get('id', ''),
+                        'article_id': case.get('article_id', 'N/A')
+                    },
+                    'document': type('obj', (object,), {'page_content': case.get('text', '')})(),
+                    'similarity_score': case.get('similarity', 0.0)
+                })
+            
+            # best_match는 첫 번째 항목
+            if similar_cases:
+                best_match = similar_cases[0]
+        
+        return similar_cases, best_match
+    
+    def generate_explanation(self, result: Dict, user_text: str) -> str:
+        """이미 계산된 결과를 바탕으로 LLM 설명만 생성
+        
+        Args:
+            result: judge_clause(skip_llm_generation=True)의 결과
+            user_text: 원본 약관 텍스트
+            
+        Returns:
+            explanation 문자열
+        """
+        if not result.get('violation'):
+            return None
+        
+        similar_cases, best_match = self._prepare_similar_cases_from_result(result)
+        
+        final_score = result.get('confidence', 0.0)
+        pattern_analysis = result.get('patterns', {})
+        law_structure_info = result.get('law_structure', {})
+        confidence_expression = result.get('confidence_expression', '')
+        
+        return self._generate_explanation(
+            user_text=user_text,
+            best_match=best_match,
+            similar_cases=similar_cases,
+            final_score=final_score,
+            pattern_analysis=pattern_analysis,
+            law_structure_info=law_structure_info,
+            confidence_expression=confidence_expression
+        )
+    
+    def generate_suggestion(self, result: Dict, user_text: str) -> str:
+        """이미 계산된 결과를 바탕으로 LLM 수정 제안만 생성
+        
+        Args:
+            result: judge_clause(skip_llm_generation=True)의 결과
+            user_text: 원본 약관 텍스트
+            
+        Returns:
+            suggestion 문자열
+        """
+        if not result.get('violation'):
+            return None
+        
+        similar_cases, _ = self._prepare_similar_cases_from_result(result)
+        
+        pattern_analysis = result.get('patterns', {})
+        law_structure_info = result.get('law_structure', {})
+        
+        return self._generate_suggestion(
+            user_text=user_text,
+            similar_cases=similar_cases,
+            pattern_analysis=pattern_analysis,
+            law_structure_info=law_structure_info
+        )
     
     # ======================================================================
     # 핵심: Prototypical Networks (개선)
@@ -781,33 +892,33 @@ class GraphRAGJudge:
         graph_propagation_score: float = 0.0  # 🆕 추가
     ) -> float:
         """
-        수식 기반 종합 점수 계산 (4가지 요소)
+        수식 기반 종합 점수 계산 (3가지 요소)
         
         구성:
-        - 20%: 위반사례 유사도
-        - 55%: Prototypical 상대적 불공정도 (60% → 55%)
+        - 10%: 위반사례 유사도
+        - 70%: Prototypical 상대적 불공정도
         - 20%: JSON 패턴 점수
-        - 5%: 🆕 GraphRAG 네트워크 전파 점수 (실험적)
+        - 0%: GraphRAG 네트워크 전파 점수 (사용 안 함)
         """
         weights = {
-            'unfair': 0.20,
-            'relative': 0.60,  #그래프 없을때 0.6이었음
-            'pattern_json': 0.10,
-            'graph_propagation': 0.10 
+            'unfair': 0.10,
+            'relative': 0.70,
+            'pattern_json': 0.20,
+            'graph_propagation': 0.0  # 사용 안 함
         }
         
         formula_score = (
             unfair_similarity * weights['unfair'] +
             relative_unfairness * weights['relative'] +
-            pattern_json_score * weights['pattern_json'] +
-            graph_propagation_score * weights['graph_propagation']  # 🆕 추가
+            pattern_json_score * weights['pattern_json']
+            # graph_propagation_score * weights['graph_propagation']  # 주석처리: 사용 안 함
         )
         
         print(f"  점수 구성:")
         print(f"    - 위반사례 유사도 ({weights['unfair']:.0%}): {unfair_similarity:.3f} → {unfair_similarity * weights['unfair']:.3f}")
         print(f"    - Prototypical 불공정도 ({weights['relative']:.0%}): {relative_unfairness:.3f} → {relative_unfairness * weights['relative']:.3f}")
         print(f"    - JSON 패턴 ({weights['pattern_json']:.0%}): {pattern_json_score:.3f} → {pattern_json_score * weights['pattern_json']:.3f}")
-        print(f"    - 🆕 GraphRAG 네트워크 ({weights['graph_propagation']:.0%}): {graph_propagation_score:.3f} → {graph_propagation_score * weights['graph_propagation']:.3f}")
+        # print(f"    - 🆕 GraphRAG 네트워크 ({weights['graph_propagation']:.0%}): {graph_propagation_score:.3f} → {graph_propagation_score * weights['graph_propagation']:.3f}")  # 주석처리: 사용 안 함
         
         return formula_score
     
