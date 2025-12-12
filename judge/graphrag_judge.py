@@ -680,7 +680,7 @@ class GraphRAGJudge:
         
         Args:
             result: judge_clause(skip_llm_generation=True)의 결과
-            user_text: 원본 약관 텍스트
+            user_text: 원본 약관 텍스트 (사용 안 함, result에서 가져옴)
             
         Returns:
             explanation 문자열
@@ -688,9 +688,9 @@ class GraphRAGJudge:
         if not result.get('violation'):
             return None
         
-        # user_text를 processed_text로 변환
-        preprocessing_result = self._preprocess_user_input(user_text)
-        processed_text = preprocessing_result['final_input']
+        # result에서 이미 전처리된 텍스트 사용 (중복 전처리 방지)
+        preprocessing_result = result.get('preprocessing', {})
+        processed_text = preprocessing_result.get('final_input', user_text)
         
         similar_cases, best_match = self._prepare_similar_cases_from_result(result)
         
@@ -714,7 +714,7 @@ class GraphRAGJudge:
         
         Args:
             result: judge_clause(skip_llm_generation=True)의 결과
-            user_text: 원본 약관 텍스트
+            user_text: 원본 약관 텍스트 (사용 안 함, result에서 가져옴)
             
         Returns:
             suggestion 문자열
@@ -722,9 +722,9 @@ class GraphRAGJudge:
         if not result.get('violation'):
             return None
         
-        # user_text를 processed_text로 변환
-        preprocessing_result = self._preprocess_user_input(user_text)
-        processed_text = preprocessing_result['final_input']
+        # result에서 이미 전처리된 텍스트 사용 (중복 전처리 방지)
+        preprocessing_result = result.get('preprocessing', {})
+        processed_text = preprocessing_result.get('final_input', user_text)
         
         similar_cases, _ = self._prepare_similar_cases_from_result(result)
         
@@ -1028,18 +1028,10 @@ class GraphRAGJudge:
     ) -> float:
         """
         수식 기반 종합 점수 계산 (3가지 요소)
-        
-        구성:
-        - 10%: 위반사례 유사도
-        - 70%: Prototypical 상대적 불공정도
-        - 20%: JSON 패턴 점수
-        - 0%: GraphRAG 네트워크 전파 점수 (사용 안 함)
+
         """
-        weights = {
-            'unfair': 0.20,
-            'relative': 0.60,
-            'pattern_json': 0.20,
-        }
+        # settings.py의 SCORE_WEIGHTS 사용
+        weights = settings.SCORE_WEIGHTS
         
         formula_score = (
             unfair_similarity * weights['unfair'] +
