@@ -150,6 +150,36 @@
         "regex": "피해\\s*배상.{0,10}(도|을|를)?.{0,10}(하지\\s*않|지지\\s*않|없)",
         "keyword": "피해배상 거부",
         "risk_level": "high"
+      },
+      {
+        "name": "수리교환한정패턴",
+        "regex": "수리.*교환.*(외|이외|한하).{0,10}(배상|책임).*(않|없)",
+        "keyword": "수리/교환 외 배상 불가",
+        "risk_level": "high"
+      },
+      {
+        "name": "설명의무배제패턴",
+        "regex": "(설명|고지).*의무.*(없|배제|면제)",
+        "keyword": "설명 의무 배제",
+        "risk_level": "high"
+      },
+      {
+        "name": "간접특별손해면책패턴",
+        "regex": "(간접|특별)\\s*손해.*책임.*(없|지지\\s*않)",
+        "keyword": "간접/특별 손해 면책",
+        "risk_level": "high"
+      },
+      {
+        "name": "포괄적서비스면책패턴",
+        "regex": "서비스.*이용.*손해.*책임.*(없|지지\\s*않)",
+        "keyword": "포괄적 서비스 이용 면책",
+        "risk_level": "critical"
+      },
+      {
+        "name": "묵시적보증부인패턴",
+        "regex": "묵시적.*보증.*(배제|하지\\s*않|없)",
+        "keyword": "묵시적 보증 부인",
+        "risk_level": "high"
       }
     ],
     "exception_patterns": [
@@ -336,11 +366,35 @@
         "regex": "\\d+배|\\d+0만원.*위약금",
         "keyword": "과도한 배수 위약금",
         "risk_level": "high"
+      },
+      {
+        "name": "단순변심몰수패턴",
+        "regex": "단순\\s*변심.*(몰수|반환\\s*불가|위약금)",
+        "keyword": "단순 변심 계약금 몰수",
+        "risk_level": "critical"
+      },
+      {
+        "name": "귀책무관위약금패턴",
+        "regex": "(귀책|책임).*무관.*(위약금|배상)",
+        "keyword": "귀책사유 무관 위약금",
+        "risk_level": "critical"
+      },
+      {
+        "name": "일당고정연체료패턴",
+        "regex": "1일당.*원.*(연체|지연).*(료|금)",
+        "keyword": "일당 고정 연체료",
+        "risk_level": "high"
+      },
+      {
+        "name": "정해진위약금강제패턴",
+        "regex": "정해진.*위약금.*(전적|무조건).*부담",
+        "keyword": "정해진 위약금 강제",
+        "risk_level": "high"
       }
     ],
     "exception_patterns": [
       {
-        "regex": "[1-9]%|10%|10\\s*퍼센트",
+        "regex": "\\b([1-9]|10)%|\\b10\\s*퍼센트",
         "description": "합리적 수준의 위약금 (1-10%)",
         "penalty": 0.4
       },
@@ -497,15 +551,39 @@
         "regex": "잔여\\s*기간.{0,30}(전액|위약금)",
         "keyword": "잔여 기간 위약금",
         "risk_level": "high"
+      },
+      {
+        "name": "절대환불불가패턴",
+        "regex": "환불.*(절대|일체).*불가",
+        "keyword": "환불 절대 불가",
+        "risk_level": "critical"
+      },
+      {
+        "name": "거부불가패턴",
+        "regex": "(거부|이의|항변).*할\\s*수\\s*없",
+        "keyword": "거부/이의 제기 불가",
+        "risk_level": "high"
+      },
+      {
+        "name": "중도해지반환불가패턴",
+        "regex": "중도\\s*해지.*(반환|환불).*(되지\\s*않|불가|없)",
+        "keyword": "중도 해지 시 반환 불가",
+        "risk_level": "critical"
+      },
+      {
+        "name": "원상회복전적부담패턴",
+        "regex": "원상회복.*(비용|의무).*전적으로.*부담",
+        "keyword": "원상회복 전적 부담",
+        "risk_level": "high"
       }
     ],
     "exception_patterns": [
-        {
-          "regex": "제한.*없|제한되지.*않|해지권.*행사.*수|언제든.*해지",
-          "description": "고객 권리 보장",
-          "penalty": 0.5
-        },
-        {
+      {
+        "regex": "제한.*없|제한되지.*않|해지권.*행사.*수|언제든.*해지",
+        "description": "고객 권리 보장",
+        "penalty": 0.5
+      },
+      {
         "regex": "(30일|\\d+일).*전.*(통지|고지)",
         "description": "충분한 사전 통지 기간",
         "penalty": 0.4
@@ -515,21 +593,21 @@
         "description": "잔여 금액 환불 보장",
         "penalty": 0.4
       },
-        {
-          "keywords": [
-            "사전 통지",
-            "사전 고지",
-            "상당한 기간"
-          ],
-          "description": "합리적 절차 (단순 키워드)",
-          "penalty": 0.3
-        },
-        {
-          "regex": "((([7-9]|\\d{2,})\\s*일)|(\\d+\\s*(주|월|개월)))\\s+전\\s+(통보|고지|안내)",
-          "description": "합리적 절차 (최소 7일 이상 사전 고지)",
-          "penalty": 0.5
-        }
-      ]
+      {
+        "keywords": [
+          "사전 통지",
+          "사전 고지",
+          "상당한 기간"
+        ],
+        "description": "합리적 절차 (단순 키워드)",
+        "penalty": 0.3
+      },
+      {
+        "regex": "((([7-9]|\\d{2,})\\s*일)|(\\d+\\s*(주|월|개월)))\\s+전\\s+(통보|고지|안내)",
+        "description": "합리적 절차 (최소 7일 이상 사전 고지)",
+        "penalty": 0.5
+      }
+    ]
   },
   "제10조": {
     "title": "채무의 이행",
@@ -636,6 +714,18 @@
         "name": "서비스내용변경패턴",
         "regex": "서비스\\s*(내용|조건).*(변경|수정|개정)",
         "keyword": "서비스 내용/조건 변경",
+        "risk_level": "high"
+      },
+      {
+        "name": "이의제기금지패턴",
+        "regex": "(변경|수정|축소).*이의.*제기.*(없|금지)",
+        "keyword": "변경에 대한 이의 금지",
+        "risk_level": "high"
+      },
+      {
+        "name": "제3자대행면책패턴",
+        "regex": "제3자.*(대행|위탁).*책임.*(부담|지).*않",
+        "keyword": "제3자 대행 면책",
         "risk_level": "high"
       }
     ],
@@ -835,6 +925,18 @@
         "regex": "타사.*(이용|사용|서비스).*(위반|금지|위약금)",
         "keyword": "타사 이용 제한 + 위약금",
         "risk_level": "critical"
+      },
+      {
+        "name": "기한이익부인패턴",
+        "regex": "기한의\\s*이익.*(인정|허용).*않",
+        "keyword": "기한의 이익 부인",
+        "risk_level": "critical"
+      },
+      {
+        "name": "타사위반처리패턴",
+        "regex": "타사.*(이용|사용).*위반.*처리",
+        "keyword": "타사 이용 시 위반 처리",
+        "risk_level": "high"
       }
     ],
     "exception_patterns": [
@@ -867,7 +969,7 @@
         "description": "합리적 조건",
         "penalty": 0.4
       }
-    ] 
+    ]
   },
   "제12조": {
     "title": "의사표시의 의제",
@@ -963,6 +1065,24 @@
         "regex": "시행일.{0,20}(정하지\\s*않|불확정|필요한\\s*시점)",
         "keyword": "시행일 불확정",
         "risk_level": "medium"
+      },
+      {
+        "name": "침묵승낙패턴",
+        "regex": "(침묵|무응답|연락.*없).*(승낙|동의).*(간주|본다)",
+        "keyword": "침묵 시 승낙 간주",
+        "risk_level": "critical"
+      },
+      {
+        "name": "발송도달간주패턴",
+        "regex": "발송.*(즉시|하면).*도달.*(간주|본다)",
+        "keyword": "발송 시 도달 간주",
+        "risk_level": "high"
+      },
+      {
+        "name": "무연락자동승낙패턴",
+        "regex": "(연락|응답).*없.*자동.*(승낙|동의)",
+        "keyword": "무연락 자동 승낙",
+        "risk_level": "critical"
       }
     ],
     "exception_patterns": [
@@ -1025,6 +1145,18 @@
         "regex": "대리인.{0,20}보증인",
         "keyword": "대리인=보증인",
         "risk_level": "critical"
+      },
+      {
+        "name": "대리인대신이행패턴",
+        "regex": "대리인.*대신.*(이행|부담)",
+        "keyword": "대리인 대신 이행",
+        "risk_level": "high"
+      },
+      {
+        "name": "대리인공동책임패턴",
+        "regex": "대리인.*공동.*책임",
+        "keyword": "대리인 공동 책임",
+        "risk_level": "high"
       }
     ],
     "exception_patterns": []
@@ -1106,6 +1238,30 @@
         "name": "회사귀책입증패턴",
         "regex": "회사.*귀책.*고객.*입증|회사.*책임.*고객.*입증",
         "keyword": "회사 귀책사유 고객 입증",
+        "risk_level": "critical"
+      },
+      {
+        "name": "입증비용전가패턴",
+        "regex": "입증.*비용.*(스스로|자신이|고객이).*부담",
+        "keyword": "입증 비용 고객 부담",
+        "risk_level": "high"
+      },
+      {
+        "name": "전속관할강제패턴",
+        "regex": "(본사|회사).*관할.*전속",
+        "keyword": "전속 관할 강제",
+        "risk_level": "high"
+      },
+      {
+        "name": "법적절차포기패턴",
+        "regex": "법적\\s*절차.*(포기|진행.*없)",
+        "keyword": "법적 절차 포기",
+        "risk_level": "critical"
+      },
+      {
+        "name": "소송다툼금지패턴",
+        "regex": "소송.*다툴\\s*수\\s*없",
+        "keyword": "소송으로 다툴 수 없음",
         "risk_level": "critical"
       }
     ],
@@ -1483,9 +1639,3 @@
     ]
   }
 }
-
-
-
-
-
-
