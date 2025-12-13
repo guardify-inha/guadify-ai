@@ -10,6 +10,7 @@ from pathlib import Path
 import os
 import json
 from datetime import datetime
+from typing import Dict
 
 # 프로젝트 루트
 project_root = Path(__file__).parent.parent
@@ -51,6 +52,21 @@ class TeeOutput:
 
 class GraphRAGJudgeNoLLM(GraphRAGJudge):
     """LLM 제외 테스트용 Judge"""
+
+    def _preprocess_user_input(self, user_text: str) -> Dict:
+        """LLM 전처리 스킵 - 원본 텍스트 그대로 사용"""
+        print(f"  ⏭️  LLM 전처리 스킵 (테스트 모드)")
+        print(f"  ✅ 원본 텍스트 그대로 사용: {user_text[:50]}...\n")
+        
+        return {
+            'is_multiple_clauses': False,
+            'first_clause_raw': user_text,
+            'needs_summary': False,
+            'final_input': user_text,  # 원본 그대로 사용
+            'processing_note': 'LLM 전처리 스킵 (테스트 모드)',
+            'original_length': len(user_text),
+            'final_length': len(user_text)
+        }
 
     def _llm_semantic_reversal_check(self, *args, **kwargs):
         """Phase 6 스킵"""
@@ -109,7 +125,7 @@ def main():
         df_valid = df_valid.reset_index(drop=True)
 
         print(f"✅ 유효한 테스트 데이터: {len(df_valid)}개")
-        print(f"⏭️  LLM 사용 제외됨 (Phase 6, 설명, 수정 제안)\n")
+        print(f"⏭️  LLM 사용 제외됨 (전처리, Phase 6, 설명, 수정 제안)\n")
 
         # 2. Judge 초기화
         print("GraphRAGJudge 초기화 중...")
@@ -215,7 +231,7 @@ def main():
                 "test_date": datetime.now().isoformat(),
                 "source": "test_input.csv",
                 "total_tests": len(df_valid),
-                "llm_excluded": ["Phase 6", "설명", "수정 제안"],
+                "llm_excluded": ["전처리", "Phase 6", "설명", "수정 제안"],
             },
             "confusion_matrix": {"TP": tp, "FN": fn, "FP": fp, "TN": tn},
             "metrics": {

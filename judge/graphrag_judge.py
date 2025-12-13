@@ -29,8 +29,8 @@ class GraphRAGJudge:
         # 임계값 설정
         self.THRESHOLDS = settings.THRESHOLDS
         
-        # Prototypical Networks 파라미터
-        self.TEMPERATURE = 0.5  # 0.4 → 0.5 (더 부드러운 확률 분포)
+        # Prototypical Networks 파라미터 (settings.TEMPERATURE 참조)
+        self.TEMPERATURE = settings.TEMPERATURE
         
         # 조항 우선순위
         self.ARTICLE_PRIORITY = {
@@ -271,20 +271,26 @@ class GraphRAGJudge:
             print(f"⚠️ 패턴 로드 실패: {e}")
             self.patterns = {}
     
-    def judge_clause(self, user_text: str, primary_score: float = None, skip_llm_generation: bool = False) -> Dict:
+    def judge_clause(self, user_text: str, primary_score: float = None, skip_llm_generation: bool = False, preprocessing_result: Dict = None) -> Dict:
         """약관 조항 종합 판단
         
         Args:
             user_text: 분석할 약관 텍스트
             primary_score: 조항별 위반도 분석의 최고 위반 조항 점수 (None이면 내부 계산)
             skip_llm_generation: True면 설명/수정제안 생성 스킵 (빠른 계산만 수행)
+            preprocessing_result: 이미 전처리된 결과 (None이면 내부에서 전처리 수행)
         """
         print(f"\n{'='*70}")
         print(f"🔍 약관 판단 시작 (v8.1 - Fixed)")
         print(f"{'='*70}\n")
         print(f"입력: {user_text[:100]}...\n")
 
-        preprocessing_result = self._preprocess_user_input(user_text)
+        # 전처리 결과가 제공되지 않으면 내부에서 수행
+        if preprocessing_result is None:
+            preprocessing_result = self._preprocess_user_input(user_text)
+        else:
+            print("✅ 이미 전처리된 결과 사용 (중복 전처리 방지)\n")
+        
         processed_text = preprocessing_result['final_input']
     
         print(f"입력 (전처리 후): {processed_text[:100]}...\n")
@@ -1381,12 +1387,12 @@ class GraphRAGJudge:
             }
     
     def _get_confidence_expression(self, score: float) -> str:
-        """위반 퍼센트에 따른 표현 차별화"""
-        if score >= 0.90:
+        """위반 퍼센트에 따른 표현 차별화 (settings.THRESHOLDS 참조)"""
+        if score >= self.THRESHOLDS['high_risk']:
             return "위반이 명확히 판단됩니다"
-        elif score >= 0.80:
+        elif score >= self.THRESHOLDS['medium_risk']:
             return "위반으로 강하게 추정됩니다"
-        elif score >= 0.75:
+        elif score >= self.THRESHOLDS['low_risk']:
             return "위반된 것으로 추정됩니다"
         else:
             return "위반 가능성이 낮은 것으로 판단됩니다"

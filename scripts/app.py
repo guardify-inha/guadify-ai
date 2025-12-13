@@ -116,16 +116,36 @@ if analyze_button and user_input.strip():
     try:
         judge, scorer = get_judge()
 
-        # 조항별 위반도 점수 계산 (빠른 계산)
+        # 전처리 수행 (모든 분석은 processed_text 기반)
+        preprocessing_result = judge._preprocess_user_input(user_input)
+        processed_text = preprocessing_result['final_input']
+
+        # 조항별 위반도 점수 계산 (빠른 계산) - processed_text 사용
         with st.spinner("📊 패턴 분석 중..."):
-            article_scores = scorer.calculate_article_scores(user_input)
+            article_scores = scorer.calculate_article_scores(processed_text)
             primary_violation = scorer.get_primary_violation(article_scores)
             primary_score = primary_violation.get('score', 0.0)
 
-        # 빠른 계산만 수행 (LLM 생성 스킵)
+        # 빠른 계산만 수행 (LLM 생성 스킵) - 이미 전처리된 결과 전달
         with st.spinner("🔍 유사도 분석 및 Prototypical Networks 계산 중..."):
-            result = judge.judge_clause(user_input, primary_score=primary_score, skip_llm_generation=True)
+            result = judge.judge_clause(user_input, primary_score=primary_score, skip_llm_generation=True, preprocessing_result=preprocessing_result)
         
+        # ✅ 전처리 정보 표시 (수정됨: 요약 숨김, 다중 조항 시 원문만 표시)
+        if 'preprocessing' in result:
+            preprocessing = result['preprocessing']
+            
+            # 다중 조항인 경우에만 경고 표시
+            if preprocessing.get('is_multiple_clauses'):
+                st.warning(f"⚠️ **여러 조항이 감지되어 첫 번째 조항만 분석했습니다**")
+                
+                with st.expander("📝 분석에 사용된 조항 확인", expanded=True):
+                    st.markdown("**실제 분석에 사용된 조항 (첫 번째 조항 원문):**")
+                    # 요약본(final_input)은 보여주지 않고, 추출된 조항 원문(first_clause_raw)만 보여줍니다.
+                    st.text_area("", value=preprocessing['first_clause_raw'], height=80, disabled=True, label_visibility="collapsed")
+            
+            # needs_summary가 True여도 사용자에게는 알리지 않음 (UI 유지)
+
+
         # === 빠른 결과 즉시 표시 ===
         st.markdown("---")
         st.subheader("📊 판단 결과")
@@ -204,20 +224,6 @@ if analyze_button and user_input.strip():
                 if interpretation:
                     st.info(f"💡 **해석:** {interpretation}")
         
-        # ✅ 전처리 정보 표시 (수정됨: 요약 숨김, 다중 조항 시 원문만 표시)
-        if 'preprocessing' in result:
-            preprocessing = result['preprocessing']
-            
-            # 다중 조항인 경우에만 경고 표시
-            if preprocessing.get('is_multiple_clauses'):
-                st.warning(f"⚠️ **여러 조항이 감지되어 첫 번째 조항만 분석했습니다**")
-                
-                with st.expander("📝 분석에 사용된 조항 확인", expanded=True):
-                    st.markdown("**실제 분석에 사용된 조항 (첫 번째 조항 원문):**")
-                    # 요약본(final_input)은 보여주지 않고, 추출된 조항 원문(first_clause_raw)만 보여줍니다.
-                    st.text_area("", value=preprocessing['first_clause_raw'], height=80, disabled=True, label_visibility="collapsed")
-            
-            # needs_summary가 True여도 사용자에게는 알리지 않음 (UI 유지)
 
         # === 조항별 위반도 분석 ===
         st.markdown("---")
@@ -282,8 +288,9 @@ if analyze_button and user_input.strip():
                     '예외': len(details.get('matched_exceptions', []))
                 })
 
-                df_detailed = pd.DataFrame(detailed_data).sort_values('점수', ascending=False)
-                st.dataframe(df_detailed, width='stretch')
+            # for 루프 밖에서 DataFrame 생성 및 표시
+            df_detailed = pd.DataFrame(detailed_data).sort_values('점수', ascending=False)
+            st.dataframe(df_detailed, width='stretch')
 
             # 매칭 상세 (최고 점수 조항만)
             if primary_score >= threshold:

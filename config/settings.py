@@ -42,12 +42,12 @@ class Settings:
     # =========================================================================
     # GraphRAG 설정
     # =========================================================================
-    TEMPERATURE = 0.5  # Prototypical Networks temperature
+    TEMPERATURE = 0.45  # Prototypical Networks temperature
 
     SCORE_WEIGHTS = {
         'unfair': 0.1,
-        'relative': 0.6,
-        'pattern_json': 0.3
+        'relative': 0.7,
+        'pattern_json': 0.2
     }
 
     THRESHOLDS = {
