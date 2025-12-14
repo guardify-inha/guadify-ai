@@ -312,6 +312,100 @@ if analyze_button and user_input.strip():
                     for exc in details['matched_exceptions']:
                         st.caption(f"• {exc}")
 
+        # 약관법 원문 데이터
+        LAW_ARTICLES_TEXT = {
+            "제7조": """제7조 : (면책조항의 금지) 계약 당사자의 책임에 관하여 정하고 있는 약관의 내용 중 다음 각 호의 어느 하나에 해당하는 내용을 정하고 있는 조항은 무효로 한다.
+제1호 : 사업자, 이행 보조자 또는 피고용자의 고의 또는 중대한 과실로 인한 법률상의 책임을 배제하는 조항
+제2호 : 상당한 이유 없이 사업자의 손해배상 범위를 제한하거나 사업자가 부담하여야 할 위험을 고객에게 떠넘기는 조항
+제3호 : 상당한 이유 없이 사업자의 담보책임을 배제 또는 제한하거나 그 담보책임에 따르는 고객의 권리행사의 요건을 가중하는 조항
+제4호 : 상당한 이유 없이 계약목적물에 관하여 견본이 제시되거나 품질ㆍ성능 등에 관한 표시가 있는 경우 그 보장된 내용에 대한 책임을 배제 또는 제한하는 조항""",
+            "제8조": """제8조 : (손해배상액의 예정) 고객에게 부당하게 과중한 지연 손해금 등의 손해배상 의무를 부담시키는 약관 조항은 무효로 한다.""",
+            "제9조": """제9조 : (계약의 해제ㆍ해지) 계약의 해제ㆍ해지에 관하여 정하고 있는 약관의 내용 중 다음 각 호의 어느 하나에 해당되는 내용을 정하고 있는 조항은 무효로 한다.
+제1호 : 법률에 따른 고객의 해제권 또는 해지권을 배제하거나 그 행사를 제한하는 조항
+제2호 : 사업자에게 법률에서 규정하고 있지 아니하는 해제권 또는 해지권을 부여하여 고객에게 부당하게 불이익을 줄 우려가 있는 조항
+제3호 : 법률에 따른 사업자의 해제권 또는 해지권의 행사 요건을 완화하여 고객에게 부당하게 불이익을 줄 우려가 있는 조항
+제4호 : 계약의 해제 또는 해지로 인한 원상회복의무를 상당한 이유 없이 고객에게 과중하게 부담시키거나 고객의 원상회복 청구권을 부당하게 포기하도록 하는 조항
+제5호 : 계약의 해제 또는 해지로 인한 사업자의 원상회복의무나 손해배상의무를 부당하게 경감하는 조항
+제6호 : 계속적인 채권관계의 발생을 목적으로 하는 계약에서 그 존속기간을 부당하게 단기 또는 장기로 하거나 묵시적인 기간의 연장 또는 갱신이 가능하도록 정하여 고객에게 부당하게 불이익을 줄 우려가 있는 조항""",
+            "제10조": """제10조 : (채무의 이행) 채무의 이행에 관하여 정하고 있는 약관의 내용 중 다음 각 호의 어느 하나에 해당하는 내용을 정하고 있는 조항은 무효로 한다.
+제1호 : 상당한 이유 없이 급부(給付)의 내용을 사업자가 일방적으로 결정하거나 변경할 수 있도록 권한을 부여하는 조항
+제2호 : 상당한 이유 없이 사업자가 이행하여야 할 급부를 일방적으로 중지할 수 있게 하거나 제3자에게 대행할 수 있게 하는 조항""",
+            "제11조": """제11조 : (고객의 권익 보호) 고객의 권익에 관하여 정하고 있는 약관의 내용 중 다음 각 호의 어느 하나에 해당하는 내용을 정하고 있는 조항은 무효로 한다.
+제1호 : 법률에 따른 고객의 항변권(抗辯權), 상계권(相計權) 등의 권리를 상당한 이유 없이 배제하거나 제한하는 조항
+제2호 : 고객에게 주어진 기한의 이익을 상당한 이유 없이 박탈하는 조항
+제3호 : 고객이 제3자와 계약을 체결하는 것을 부당하게 제한하는 조항
+제4호 : 사업자가 업무상 알게 된 고객의 비밀을 정당한 이유 없이 누설하는 것을 허용하는 조항""",
+            "제12조": """제12조 : (의사표시의 의제) 의사표시에 관하여 정하고 있는 약관의 내용 중 다음 각 호의 어느 하나에 해당하는 내용을 정하고 있는 조항은 무효로 한다.
+제1호 : 일정한 작위(作爲) 또는 부작위(不作爲)가 있을 경우 고객의 의사표시가 표명되거나 표명되지 아니한 것으로 보는 조항. 다만, 고객에게 상당한 기한 내에 의사표시를 하지 아니하면 의사표시가 표명되거나 표명되지 아니한 것으로 본다는 뜻을 명확하게 따로 고지한 경우이거나 부득이한 사유로 그러한 고지를 할 수 없는 경우에는 그러하지 아니하다.
+제2호 : 고객의 의사표시의 형식이나 요건에 대하여 부당하게 엄격한 제한을 두는 조항
+제3호 : 고객의 이익에 중대한 영향을 미치는 사업자의 의사표시가 상당한 이유 없이 고객에게 도달된 것으로 보는 조항
+제4호 : 고객의 이익에 중대한 영향을 미치는 사업자의 의사표시 기한을 부당하게 길게 정하거나 불확정하게 정하는 조항""",
+            "제13조": """제13조 : (대리인의 책임 가중) 고객의 대리인에 의하여 계약이 체결된 경우 고객이 그 의무를 이행하지 아니하는 경우에는 대리인에게 그 의무의 전부 또는 일부를 이행할 책임을 지우는 내용의 약관 조항은 무효로 한다.""",
+            "제14조": """제14조 : (소송 제기의 금지 등) 소송 제기 등과 관련된 약관의 내용 중 다음 각 호의 어느 하나에 해당하는 조항은 무효로 한다.
+제1호 : 고객에게 부당하게 불리한 소송 제기 금지 조항 또는 재판관할의 합의 조항
+제2호 : 상당한 이유 없이 고객에게 입증책임을 부담시키는 약관 조항"""
+        }
+
+        # 최고 위반조항의 약관법 원문 표시
+        if primary_violation['article'] and primary_violation['article'] in LAW_ARTICLES_TEXT:
+            st.markdown("---")
+            st.subheader("📜 최고 위반조항 약관법 원문")
+            
+            article_text = LAW_ARTICLES_TEXT[primary_violation['article']]
+            
+            # 텍스트를 파싱하여 HTML로 포맷팅
+            lines = article_text.split('\n')
+            html_lines = []
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # 조항 제목 (제X조로 시작하고 '조'가 포함된 줄, '호'는 포함하지 않음)
+                if line.startswith('제') and '조' in line and '호' not in line and ':' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        title = parts[0].strip()
+                        content = parts[1].strip()
+                        html_lines.append(f'<h4 style="color: #1f77b4; margin-top: 1rem; margin-bottom: 0.5rem;">{title}</h4>')
+                        html_lines.append(f'<p style="font-weight: 900; margin-bottom: 1rem; color: #333;">{content}</p>')
+                    else:
+                        html_lines.append(f'<h4 style="color: #1f77b4; margin-top: 1rem; margin-bottom: 0.5rem;">{line}</h4>')
+                # 호 항목 (제X호로 시작하는 줄) - h4가 아닌 일반 텍스트로 처리
+                elif '호' in line and ':' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        ho = parts[0].strip()
+                        content = parts[1].strip()
+                        html_lines.append(f'<div style="margin: 0.3rem 0; padding: 0.3rem 0 0.3rem 0.8rem; border-left: 2px solid #e0e0e0;">')
+                        html_lines.append(f'<span style="color: #666; font-weight: 500; font-size: 0.85rem; display: inline;">{ho}</span><span style="color: #444; margin-left: 0.3rem;">{content}</span>')
+                        html_lines.append(f'</div>')
+                    else:
+                        html_lines.append(f'<p style="margin: 0.5rem 0; font-size: 0.85rem;">{line}</p>')
+                else:
+                    html_lines.append(f'<p style="margin: 0.5rem 0; font-size: 0.85rem;">{line}</p>')
+            
+            # 카드 형태로 표시
+            html_content = '\n'.join(html_lines)
+            st.markdown(
+                f"""
+                <div style="
+                    background: linear-gradient(to right, #f8f9fa 0%, #ffffff 100%);
+                    border-left: 5px solid #1f77b4;
+                    padding: 1.5rem;
+                    border-radius: 8px;
+                    margin: 1rem 0;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    font-size: 0.85rem;
+                    line-height: 1.7;
+                ">
+                {html_content}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
         # === 주요 근거 ===
         st.markdown("---")
         st.subheader("📌 주요 근거")
@@ -505,7 +599,7 @@ else:
         ### 정상 예시:
         
         5. **합리적 면책**
-            > "회사는 천재지변 등 불가항력으로 인한 손해에 대해서는 책임을 지지 않습니다."
+            > "회사는 천재지변 등 불가항력으로 인한 손해에 책임을 지지 않지만, 회사귀책에 인한 손해는 책임을 부담합니다."
         """)
 
 # 푸터
