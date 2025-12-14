@@ -107,6 +107,7 @@ class HybridGraphRAG:
                    subcategory: node.subcategory,
                    company: node.company,
                    corrected_text: node.corrected_text,
+                   violation_reason: node.violation_reason,
                    year: node.year,
                    other_legal_basis: node.other_legal_basis
                } AS metadata

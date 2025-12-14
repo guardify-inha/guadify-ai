@@ -10,8 +10,9 @@ GraphRAG 기반 불공정 약관 자동 판단 및 수정 제안 시스템
 2. `docker compose up -d`
 3. `.env` 파일 설정
 4. `python main.py`
-5. `python scripts/rebuild_graph.py`
-6. `streamlit run scripts/app.py`
+5. `python scripts/insert_legal_keywords.py`
+6. `python scripts/rebuild_graph.py`
+7. `streamlit run scripts/app.py`
 
 ## 환경 설정
 
@@ -62,6 +63,9 @@ EMBEDDING_MODEL_FINETUNED=moksil/bge-m3-korean-contract-finetuned-v2
 ```bash
 # 법률 그래프 구축
 python main.py
+
+# 법률용어 키워드 노드 삽입 (초기 1회만 실행)
+python scripts/insert_legal_keywords.py
 
 # ViolationCase 그래프 구축 (이중 임베딩)
 python scripts/rebuild_graph.py

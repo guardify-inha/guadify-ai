@@ -641,14 +641,30 @@ class GraphRAGJudge:
             'method': 'graphrag_v8.1_fixed',
             'top_similar_cases': [
                 {
-                    'id': case['metadata']['id'],
+                    'id': case['metadata'].get('id', ''),
                     'similarity': case['similarity_score'],
-                    'text': case['document'].page_content[:200],
-                    'article_id': case['metadata'].get('article_id', 'N/A')
+                    'text': case['document'].page_content[:200] if hasattr(case['document'], 'page_content') else str(case.get('document', '')),
+                    'article_id': case['metadata'].get('article_id', 'N/A'),
+                    'violation_reason': case['metadata'].get('violation_reason', ''),
+                    'corrected_text': case['metadata'].get('corrected_text', '')
                 }
                 for case in similar_cases[:3]
             ]
         }
+        
+        # 디버깅: top_similar_cases에 데이터가 제대로 포함되었는지 확인
+        if similar_cases:
+            first_case_metadata = similar_cases[0].get('metadata', {})
+            print(f"  🔍 첫 번째 유사 사례 메타데이터 확인:")
+            print(f"     - metadata keys: {list(first_case_metadata.keys())}")
+            print(f"     - violation_reason 존재: {bool(first_case_metadata.get('violation_reason'))}")
+            print(f"     - corrected_text 존재: {bool(first_case_metadata.get('corrected_text'))}")
+            if first_case_metadata.get('violation_reason'):
+                reason_preview = str(first_case_metadata.get('violation_reason'))[:50]
+                print(f"     - violation_reason 미리보기: {reason_preview}...")
+            if first_case_metadata.get('corrected_text'):
+                corrected_preview = str(first_case_metadata.get('corrected_text'))[:50]
+                print(f"     - corrected_text 미리보기: {corrected_preview}...")
         
         print(f"{'='*70}")
         print(f"✅ 판단 완료!")
@@ -666,10 +682,13 @@ class GraphRAGJudge:
         if top_similar_cases:
             for case in top_similar_cases:
                 # 간단한 형식으로 변환 (_generate_explanation에서 사용하는 형식)
+                # violation_reason과 corrected_text 포함
                 similar_cases.append({
                     'metadata': {
                         'id': case.get('id', ''),
-                        'article_id': case.get('article_id', 'N/A')
+                        'article_id': case.get('article_id', 'N/A'),
+                        'violation_reason': case.get('violation_reason', ''),
+                        'corrected_text': case.get('corrected_text', '')
                     },
                     'document': type('obj', (object,), {'page_content': case.get('text', '')})(),
                     'similarity_score': case.get('similarity', 0.0)
@@ -1178,6 +1197,62 @@ class GraphRAGJudge:
             'article_hints': [article for article, _ in article_hints]
         }
     
+    def _find_matching_keywords(self, processed_text: str) -> List[Dict]:
+        """
+        processed_text에서 매칭된 법률용어 키워드를 Neo4j에서 조회
+        
+        Args:
+            processed_text: 분석할 약관 텍스트
+            
+        Returns:
+            매칭된 키워드 리스트: [{'keyword': '해제권', 'description': '...'}, ...]
+        """
+        try:
+            # Neo4j에서 모든 LegalKeyword 노드 조회
+            query = """
+            MATCH (k:LegalKeyword)
+            RETURN k.keyword as keyword, k.description as description
+            """
+            
+            results = self.conn.execute_query(query)
+            
+            if not results:
+                print(f"  ⚠️ LegalKeyword 노드가 Neo4j에 없습니다. insert_legal_keywords.py를 실행하세요.")
+                return []
+            
+            print(f"  📚 Neo4j에서 {len(results)}개의 LegalKeyword 노드 조회 완료")
+            
+            # processed_text를 소문자로 변환 (대소문자 구분 없이 매칭)
+            processed_lower = processed_text.lower()
+            
+            # 각 키워드가 processed_text에 포함되어 있는지 확인
+            matched_keywords = []
+            for row in results:
+                keyword = row.get('keyword', '')
+                description = row.get('description', '')
+                
+                if keyword:
+                    keyword_lower = keyword.lower()
+                    # 키워드가 텍스트에 포함되어 있는지 확인
+                    if keyword_lower in processed_lower:
+                        matched_keywords.append({
+                            'keyword': keyword,
+                            'description': description
+                        })
+            
+            if matched_keywords:
+                print(f"  ✅ {len(matched_keywords)}개의 법률용어 키워드 매칭: {[kw['keyword'] for kw in matched_keywords[:5]]}")
+            else:
+                print(f"  ℹ️ 매칭된 법률용어 키워드 없음")
+            
+            return matched_keywords
+            
+        except Exception as e:
+            print(f"⚠️ 키워드 조회 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
     # ======================================================================
     # 법률 구조 분석
     # ======================================================================
@@ -1502,9 +1577,35 @@ class GraphRAGJudge:
                     content = str(case.get('document', '')).strip()
                 
                 # 메타데이터 안전하게 가져오기
-                metadata = case.get('metadata', {})
-                reason = metadata.get('violation_reason', '정보 없음').strip()
-                corrected = metadata.get('corrected_text', '정보 없음').strip()
+                # document.metadata와 case['metadata'] 둘 다 확인
+                metadata = {}
+                if 'document' in case and hasattr(case['document'], 'metadata'):
+                    metadata.update(case['document'].metadata)
+                if 'metadata' in case:
+                    metadata.update(case['metadata'])
+                
+                reason = metadata.get('violation_reason', '') or metadata.get('violation_reason', '정보 없음')
+                if reason and reason.strip():
+                    reason = reason.strip()
+                else:
+                    reason = '정보 없음'
+                
+                corrected = metadata.get('corrected_text', '') or metadata.get('corrected_text', '정보 없음')
+                if corrected and corrected.strip():
+                    corrected = corrected.strip()
+                else:
+                    corrected = '정보 없음'
+                
+                # 디버깅: 메타데이터 확인
+                if i == 1:  # 첫 번째 사례만 로그 출력
+                    print(f"  🔍 첫 번째 사례 메타데이터 확인:")
+                    print(f"     - metadata keys: {list(metadata.keys())}")
+                    print(f"     - violation_reason 존재: {bool(metadata.get('violation_reason'))}")
+                    print(f"     - corrected_text 존재: {bool(metadata.get('corrected_text'))}")
+                    if metadata.get('violation_reason'):
+                        print(f"     - violation_reason 길이: {len(str(metadata.get('violation_reason')))}자")
+                    if metadata.get('corrected_text'):
+                        print(f"     - corrected_text 길이: {len(str(metadata.get('corrected_text')))}자")
                 
                 # 원문이 200자 이상이면 잘라서 표시
                 content_display = content[:200] + "..." if len(content) > 200 else content
@@ -1518,6 +1619,9 @@ class GraphRAGJudge:
                 formatted_cases.append(case_str)
             except Exception as e:
                 # 개별 사례 처리 실패 시 스킵
+                print(f"  ⚠️ 사례 {i} 포맷팅 실패: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
         
         if not formatted_cases:
@@ -1530,18 +1634,44 @@ class GraphRAGJudge:
         valid_corrections = []
         seen_corrections = set()  # 중복 제거용
         
-        for case in similar_cases:
+        print(f"  🔍 수정 조항 추출 중... (유사 사례 {len(similar_cases)}개)")
+        
+        for idx, case in enumerate(similar_cases, 1):
             try:
-                metadata = case.get('metadata', {})
-                corrected = metadata.get('corrected_text', '').strip()
+                # document.metadata와 case['metadata'] 둘 다 확인
+                metadata = {}
+                if 'document' in case and hasattr(case['document'], 'metadata'):
+                    metadata.update(case['document'].metadata)
+                if 'metadata' in case:
+                    metadata.update(case['metadata'])
+                
+                corrected = metadata.get('corrected_text', '')
+                if corrected:
+                    corrected = str(corrected).strip()
+                else:
+                    corrected = ''
+                
+                # 디버깅: 첫 번째 사례만 상세 로그
+                if idx == 1:
+                    print(f"     첫 번째 사례 메타데이터:")
+                    print(f"       - keys: {list(metadata.keys())}")
+                    print(f"       - corrected_text 존재: {bool(metadata.get('corrected_text'))}")
+                    if metadata.get('corrected_text'):
+                        corrected_preview = str(metadata.get('corrected_text'))[:50]
+                        print(f"       - corrected_text 미리보기: {corrected_preview}...")
                 
                 # 수정 조항이 있고, '정보 없음'이 아니며, 이전에 본 적 없는 조항일 때
                 if corrected and len(corrected) > 5 and corrected not in seen_corrections and corrected != '정보 없음':
                     seen_corrections.add(corrected)
                     valid_corrections.append(corrected)
-            except Exception:
+                    if idx <= 3:  # 처음 3개만 로그
+                        print(f"     ✅ 수정 조항 {idx} 추가됨 ({len(corrected)}자)")
+            except Exception as e:
                 # 개별 사례 처리 실패 시 스킵
+                print(f"     ⚠️ 사례 {idx} 처리 실패: {e}")
                 continue
+        
+        print(f"  📊 총 {len(valid_corrections)}개의 유효한 수정 조항 발견")
         
         if not valid_corrections:
             return "참고할 만한 구체적인 수정 사례가 없습니다. 표준 약관이나 법령에 근거하여 작성해주세요."
@@ -1591,6 +1721,32 @@ class GraphRAGJudge:
                 except Exception:
                     pass
         
+        # 법률용어 키워드 조회
+        print(f"  🔍 법률용어 키워드 검색 중...")
+        matching_keywords = self._find_matching_keywords(processed_text)
+        keywords_section = ""
+        if matching_keywords:
+            keywords_list = []
+            for kw in matching_keywords[:10]:  # 최대 10개까지만 포함
+                keyword = kw.get('keyword', '')
+                description = kw.get('description', '')
+                if keyword and description:
+                    keywords_list.append(f"- {keyword}: {description}")
+            
+            if keywords_list:
+                keywords_section = f"""
+[관련 법률용어]
+다음 법률용어들이 검토 대상 약관에 포함되어 있습니다. 이 용어들의 법적 의미를 참고하여 분석하세요:
+
+{chr(10).join(keywords_list)}
+
+"""
+                print(f"  ✅ 키워드 섹션 생성 완료 ({len(keywords_list)}개 키워드 포함)")
+            else:
+                print(f"  ⚠️ 키워드 리스트가 비어있음")
+        else:
+            print(f"  ℹ️ 매칭된 키워드 없음 - 키워드 섹션 생략")
+        
         # 조항 내용 가져오기
         article_content = law_structure_info.get('article_content', '')
         article_section = ""
@@ -1610,10 +1766,9 @@ class GraphRAGJudge:
 [검토 대상 약관]
 {processed_text}
 
-[관련 법령/가이드라인]
+{keywords_section}[관련 법령/가이드라인]
 {law_structure_info.get('full_path', '관련 법령 정보 없음')}
-{article_section}
-[유사 위반 사례 및 시정 내역]
+{article_section}[유사 위반 사례 및 시정 내역]
 이 조항과 유사한 과거 위반 사례들입니다. 특히 '시정 요청 사유'를 주의 깊게 참고하세요.
 
 ---
@@ -1682,6 +1837,32 @@ class GraphRAGJudge:
         corrected_examples = self._format_corrected_clauses_for_suggestion(similar_cases)
         print(f"  📝 포맷팅된 수정 조항 텍스트 길이: {len(corrected_examples)}자")
         
+        # 법률용어 키워드 조회
+        print(f"  🔍 법률용어 키워드 검색 중...")
+        matching_keywords = self._find_matching_keywords(processed_text)
+        keywords_section = ""
+        if matching_keywords:
+            keywords_list = []
+            for kw in matching_keywords[:10]:  # 최대 10개까지만 포함
+                keyword = kw.get('keyword', '')
+                description = kw.get('description', '')
+                if keyword and description:
+                    keywords_list.append(f"- {keyword}: {description}")
+            
+            if keywords_list:
+                keywords_section = f"""
+[관련 법률용어]
+다음 법률용어들이 검토 대상 약관에 포함되어 있습니다. 수정 제안 작성 시 이 용어들의 법적 의미를 정확히 반영하세요:
+
+{chr(10).join(keywords_list)}
+
+"""
+                print(f"  ✅ 키워드 섹션 생성 완료 ({len(keywords_list)}개 키워드 포함)")
+            else:
+                print(f"  ⚠️ 키워드 리스트가 비어있음")
+        else:
+            print(f"  ℹ️ 매칭된 키워드 없음 - 키워드 섹션 생략")
+        
         # 조항 내용 가져오기
         article_content = law_structure_info.get('article_content', '')
         article_section = ""
@@ -1698,7 +1879,7 @@ class GraphRAGJudge:
         prompt = f"""[검토 대상 약관]
 {processed_text}
 
-[위반 혐의]
+{keywords_section}[위반 혐의]
 {law_structure_info.get('full_path', 'Unknown')}
 {article_section}
 [참고: 유사 조항의 실제 수정 사례]
